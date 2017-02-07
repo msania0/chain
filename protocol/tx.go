@@ -12,15 +12,16 @@ import (
 
 // ValidateTxCached checks a cache of prevalidated transactions
 // before attempting to perform a context-free validation of the tx.
-func (c *Chain) ValidateTxCached(tx *bc.Tx) error {
+func (c *Chain) ValidateTxCached(tx *bc.Transaction) error {
 	// Consult a cache of prevalidated transactions.
-	err, ok := c.prevalidated.lookup(tx.ID)
+	hash := tx.ID()
+	err, ok := c.prevalidated.lookup(hash)
 	if ok {
 		return err
 	}
 
 	err = validation.CheckTxWellFormed(tx)
-	c.prevalidated.cache(tx.ID, err)
+	c.prevalidated.cache(hash, err)
 	return err
 }
 
@@ -48,13 +49,12 @@ func (c *prevalidatedTxsCache) cache(txID bc.Hash, err error) {
 	c.mu.Unlock()
 }
 
-func (c *Chain) checkIssuanceWindow(tx *bc.Tx) error {
-	for _, txi := range tx.Inputs {
-		if _, ok := txi.TypedInput.(*bc.IssuanceInput); ok {
-			// TODO(tessr): consider removing 0 check once we can configure this
-			if c.MaxIssuanceWindow != 0 && tx.MinTime+bc.DurationMillis(c.MaxIssuanceWindow) < tx.MaxTime {
-				return errors.WithDetailf(validation.ErrBadTx, "issuance input's time window is larger than the network maximum (%s)", c.MaxIssuanceWindow)
-			}
+func (c *Chain) checkIssuanceWindow(tx *bc.Transaction) error {
+	for range tx.Issuances {
+		// TODO(tessr): consider removing 0 check once we can configure this
+		if c.MaxIssuanceWindow != 0 && tx.MinTimeMS()+bc.DurationMillis(c.MaxIssuanceWindow) < tx.MaxTimeMS() {
+			// xxx should this be checking the iss->Anchor->TimeRange bounds instead?
+			return errors.WithDetailf(validation.ErrBadTx, "issuance input's time window is larger than the network maximum (%s)", c.MaxIssuanceWindow)
 		}
 	}
 	return nil

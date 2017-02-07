@@ -23,13 +23,13 @@ var (
 // Submitter submits a transaction to the generator so that it may
 // be confirmed in a block.
 type Submitter interface {
-	Submit(ctx context.Context, tx *bc.Tx) error
+	Submit(ctx context.Context, tx *bc.Transaction) error
 }
 
 // FinalizeTx validates a transaction signature template,
 // assembles a fully signed tx, and stores the effects of
 // its changes on the UTXO set.
-func FinalizeTx(ctx context.Context, c *protocol.Chain, s Submitter, tx *bc.Tx) error {
+func FinalizeTx(ctx context.Context, c *protocol.Chain, s Submitter, tx *bc.Transaction) error {
 	err := checkTxSighashCommitment(tx)
 	if err != nil {
 		return err
@@ -43,7 +43,8 @@ func FinalizeTx(ctx context.Context, c *protocol.Chain, s Submitter, tx *bc.Tx) 
 	err = c.ValidateTxCached(tx)
 	if errors.Root(err) == validation.ErrBadTx {
 		return errors.Sub(ErrRejected, err)
-	} else if err != nil {
+	}
+	if err != nil {
 		return errors.Wrap(err, "tx rejected")
 	}
 
@@ -68,48 +69,50 @@ var (
 	ErrTxSignatureFailure = errors.New("tx signature was attempted but failed")
 )
 
-func checkTxSighashCommitment(tx *bc.Tx) error {
+func checkTxSighashCommitment(tx *bc.Transaction) error {
 	var lastError error
 
-	for i, inp := range tx.Inputs {
-		var args [][]byte
-		switch t := inp.TypedInput.(type) {
-		case *bc.SpendInput:
-			args = t.Arguments
-		case *bc.IssuanceInput:
-			args = t.Arguments
+	check := func(args [][]byte, inpHash bc.Hash) error {
+		// xxx what's the difference between the three errors returned here?
+		switch len(args) {
+		case 0:
+			return ErrNoTxSighashAttempt
+		case 1, 2:
+			return ErrTxSignatureFailure
 		}
-		// Note: These numbers will need to change if more args are added such that the minimum length changes
-		switch {
-		// A conforming arguments list contains
-		// [... arg1 arg2 ... argN N sig1 sig2 ... sigM prog]
-		// The args are the opaque arguments to prog. In the case where
-		// N is 0 (prog takes no args), and assuming there must be at
-		// least one signature, args has a minimum length of 3.
-		case len(args) == 0:
-			lastError = ErrNoTxSighashAttempt
-			continue
-		case len(args) < 3:
-			lastError = ErrTxSignatureFailure
-			continue
-		}
-		lastError = ErrNoTxSighashCommitment
 		prog := args[len(args)-1]
 		if len(prog) != 35 {
-			continue
+			return ErrNoTxSighashCommitment
 		}
 		if prog[0] != byte(vm.OP_DATA_32) {
-			continue
+			return ErrNoTxSighashCommitment
 		}
 		if !bytes.Equal(prog[33:], []byte{byte(vm.OP_TXSIGHASH), byte(vm.OP_EQUAL)}) {
-			continue
+			return ErrNoTxSighashCommitment
 		}
-		h := tx.SigHash(uint32(i))
+		h := tx.SigHash(inpHash)
 		if !bytes.Equal(h[:], prog[1:33]) {
-			continue
+			return ErrNoTxSighashCommitment
 		}
-		// At least one input passes commitment checks
 		return nil
+	}
+
+	for _, spRef := range tx.Spends {
+		sp := spRef.Entry.(*bc.Spend)
+		err := check(sp.Arguments(), spRef.Hash())
+		if err == nil {
+			return nil
+		}
+		lastError = err
+	}
+
+	for _, issRef := range tx.Issuances {
+		iss := issRef.Entry.(*bc.Spend)
+		err := check(iss.Arguments(), issRef.Hash())
+		if err == nil {
+			return nil
+		}
+		lastError = err
 	}
 
 	return lastError
@@ -122,7 +125,7 @@ type RemoteGenerator struct {
 	Peer *rpc.Client
 }
 
-func (rg *RemoteGenerator) Submit(ctx context.Context, tx *bc.Tx) error {
+func (rg *RemoteGenerator) Submit(ctx context.Context, tx *bc.Transaction) error {
 	err := rg.Peer.Call(ctx, "/rpc/submit", tx, nil)
 	err = errors.Wrap(err, "generator transaction notice")
 	return err

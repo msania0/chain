@@ -34,4 +34,10 @@ var migrations = []migration{
 			ADD COLUMN spent_output_id bytea NOT NULL,
 			ADD COLUMN spent_output jsonb;
 	`},
+	{Name: "2017-02-20.0.core.drop-account_utxo-index.sql", SQL: `
+		ALTER TABLE account_utxos DROP CONSTRAINT account_utxos_pkey;
+		ALTER TABLE account_utxos DROP CONSTRAINT account_utxos_output_id_key;
+		ALTER TABLE account_utxos ADD CONSTRAINT account_utxos_pkey PRIMARY KEY (output_id);
+		ALTER TABLE account_utxos DROP index;
+	`},
 }

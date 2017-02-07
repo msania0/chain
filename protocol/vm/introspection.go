@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"math"
 
-	"golang.org/x/crypto/sha3"
-
 	"chain/protocol/bc"
 )
 
@@ -20,7 +18,7 @@ func opCheckOutput(vm *virtualMachine) error {
 		return err
 	}
 
-	prog, err := vm.pop(true)
+	code, err := vm.pop(true)
 	if err != nil {
 		return err
 	}
@@ -46,34 +44,43 @@ func opCheckOutput(vm *virtualMachine) error {
 	if err != nil {
 		return err
 	}
-	index, err := vm.popInt64(true)
+	outputID, err := vm.pop(true)
 	if err != nil {
 		return err
 	}
-	if index < 0 || int64(len(vm.tx.Outputs)) <= index {
+	// xxx check len(outputID)
+
+	// xxx how to handle retirements? they don't have code to check
+
+	var o *bc.Output
+	for _, resultRef := range vm.tx.Outputs {
+		id := resultRef.Hash()
+		if bytes.Equal(outputID, id[:]) {
+			o = resultRef.Entry.(*bc.Output)
+			break
+		}
+	}
+	if o == nil {
 		return ErrBadValue
 	}
 
-	o := vm.tx.Outputs[index]
-
-	if o.AssetVersion != 1 {
+	if o.Amount() != uint64(amount) {
 		return vm.pushBool(false, true)
 	}
-	if o.Amount != uint64(amount) {
+	prog := o.ControlProgram()
+	if prog.VMVersion != uint64(vmVersion) {
 		return vm.pushBool(false, true)
 	}
-	if o.VMVersion != uint64(vmVersion) {
+	if !bytes.Equal(prog.Code, code) {
 		return vm.pushBool(false, true)
 	}
-	if !bytes.Equal(o.ControlProgram, prog) {
-		return vm.pushBool(false, true)
-	}
-	if !bytes.Equal(o.AssetID[:], assetID) {
+	oAssetID := o.AssetID()
+	if !bytes.Equal(oAssetID[:], assetID) {
 		return vm.pushBool(false, true)
 	}
 	if len(refdatahash) > 0 {
-		h := sha3.Sum256(o.ReferenceData)
-		if !bytes.Equal(h[:], refdatahash) {
+		oRefDataHash := o.RefDataHash()
+		if !bytes.Equal(oRefDataHash[:], refdatahash) {
 			return vm.pushBool(false, true)
 		}
 	}
@@ -90,7 +97,27 @@ func opAsset(vm *virtualMachine) error {
 		return err
 	}
 
-	assetID := vm.tx.Inputs[vm.inputIndex].AssetID()
+	var assetID bc.AssetID
+
+	switch e := vm.input.Entry.(type) {
+	case *bc.Spend:
+		oEntry := e.SpentOutput().Entry
+		if oEntry == nil {
+			// xxx error
+		}
+		o, ok := oEntry.(*bc.Output)
+		if !ok {
+			// xxx error
+		}
+		assetID = o.AssetID()
+
+	case *bc.Issuance:
+		assetID = e.AssetID()
+
+	default:
+		// xxx error
+	}
+
 	return vm.push(assetID[:], true)
 }
 
@@ -104,7 +131,27 @@ func opAmount(vm *virtualMachine) error {
 		return err
 	}
 
-	amount := vm.tx.Inputs[vm.inputIndex].Amount()
+	var amount uint64
+
+	switch e := vm.input.Entry.(type) {
+	case *bc.Spend:
+		oEntry := e.SpentOutput().Entry
+		if oEntry == nil {
+			// xxx error
+		}
+		o, ok := oEntry.(*bc.Output)
+		if !ok {
+			// xxx error
+		}
+		amount = o.Amount()
+
+	case *bc.Issuance:
+		amount = e.Amount()
+
+	default:
+		// xxx error
+	}
+
 	return vm.pushInt64(int64(amount), true)
 }
 
@@ -131,7 +178,7 @@ func opMinTime(vm *virtualMachine) error {
 		return err
 	}
 
-	return vm.pushInt64(int64(vm.tx.MinTime), true)
+	return vm.pushInt64(int64(vm.tx.MinTimeMS()), true)
 }
 
 func opMaxTime(vm *virtualMachine) error {
@@ -144,7 +191,7 @@ func opMaxTime(vm *virtualMachine) error {
 		return err
 	}
 
-	maxTime := vm.tx.MaxTime
+	maxTime := vm.tx.MaxTimeMS()
 	if maxTime == 0 || maxTime > math.MaxInt64 {
 		maxTime = uint64(math.MaxInt64)
 	}
@@ -162,7 +209,17 @@ func opRefDataHash(vm *virtualMachine) error {
 		return err
 	}
 
-	h := sha3.Sum256(vm.tx.Inputs[vm.inputIndex].ReferenceData)
+	var h bc.Hash
+
+	switch e := vm.input.Entry.(type) {
+	case *bc.Spend:
+		h = e.RefDataHash()
+	case *bc.Issuance:
+		h = e.RefDataHash()
+	default:
+		// xxx error
+	}
+
 	return vm.push(h[:], true)
 }
 
@@ -176,21 +233,8 @@ func opTxRefDataHash(vm *virtualMachine) error {
 		return err
 	}
 
-	h := sha3.Sum256(vm.tx.ReferenceData)
+	h := vm.tx.RefDataHash()
 	return vm.push(h[:], true)
-}
-
-func opIndex(vm *virtualMachine) error {
-	if vm.tx == nil {
-		return ErrContext
-	}
-
-	err := vm.applyCost(1)
-	if err != nil {
-		return err
-	}
-
-	return vm.pushInt64(int64(vm.inputIndex), true)
 }
 
 func opOutputID(vm *virtualMachine) error {
@@ -198,17 +242,22 @@ func opOutputID(vm *virtualMachine) error {
 		return ErrContext
 	}
 
-	outid := vm.txContext.OutputID
-	if outid == nil {
+	sp, ok := vm.input.Entry.(*bc.Spend)
+	if !ok {
 		return ErrContext
 	}
+	if sp == nil {
+		// xxx error
+	}
+	spent := sp.SpentOutput()
+	outID := spent.Hash()
 
 	err := vm.applyCost(1)
 	if err != nil {
 		return err
 	}
 
-	return vm.push(outid.Hash[:], true)
+	return vm.push(outID[:], true)
 }
 
 func opNonce(vm *virtualMachine) error {
@@ -216,8 +265,7 @@ func opNonce(vm *virtualMachine) error {
 		return ErrContext
 	}
 
-	txin := vm.tx.Inputs[vm.inputIndex]
-	ii, ok := txin.TypedInput.(*bc.IssuanceInput)
+	_, ok := vm.input.Entry.(*bc.Issuance)
 	if !ok {
 		return ErrContext
 	}
@@ -227,7 +275,9 @@ func opNonce(vm *virtualMachine) error {
 		return err
 	}
 
-	return vm.push(ii.Nonce, true)
+	var nonce []byte
+	// xxx
+	return vm.push(nonce, true)
 }
 
 func opNextProgram(vm *virtualMachine) error {

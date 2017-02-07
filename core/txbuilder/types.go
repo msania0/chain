@@ -12,8 +12,8 @@ import (
 
 // Template represents a partially- or fully-signed transaction.
 type Template struct {
-	Transaction         *bc.Tx                `json:"raw_transaction"`
-	SigningInstructions []*SigningInstruction `json:"signing_instructions"`
+	Transaction         *bc.Transaction                 `json:"raw_transaction"` // xxx must json-encode to the transitive collection of entries
+	SigningInstructions map[bc.Hash]*SigningInstruction `json:"signing_instructions"`
 
 	// Local indicates that all inputs to the transaction are signed
 	// exclusively by keys managed by this Core. Whenever accepting
@@ -29,21 +29,23 @@ type Template struct {
 	AllowAdditional bool `json:"allow_additional_actions"`
 }
 
-func (t *Template) Hash(idx uint32) bc.Hash {
-	return t.Transaction.SigHash(idx)
+// Hash produces the txsighash for a specific input (given as an entry
+// hash)
+func (t *Template) Hash(inpHash bc.Hash) bc.Hash {
+	return t.Transaction.SigHash(inpHash)
 }
 
 // SigningInstruction gives directions for signing inputs in a TxTemplate.
 type SigningInstruction struct {
-	Position uint32 `json:"position"`
+	bc.Hash // hash of entry to sign
 	bc.AssetAmount
 	WitnessComponents []WitnessComponent `json:"witness_components,omitempty"`
 }
 
 func (si *SigningInstruction) UnmarshalJSON(b []byte) error {
 	var pre struct {
+		bc.Hash
 		bc.AssetAmount
-		Position          uint32 `json:"position"`
 		WitnessComponents []struct {
 			Type string
 			SignatureWitness
@@ -54,8 +56,8 @@ func (si *SigningInstruction) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
+	si.Hash = pre.Hash
 	si.AssetAmount = pre.AssetAmount
-	si.Position = pre.Position
 	si.WitnessComponents = make([]WitnessComponent, 0, len(pre.WitnessComponents))
 	for i, w := range pre.WitnessComponents {
 		if w.Type != "signature" {

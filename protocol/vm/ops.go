@@ -209,7 +209,6 @@ const (
 	OP_MAXTIME       Op = 0xc6
 	OP_TXREFDATAHASH Op = 0xc7
 	OP_REFDATAHASH   Op = 0xc8
-	OP_INDEX         Op = 0xc9
 	OP_OUTPUTID      Op = 0xcb
 	OP_NONCE         Op = 0xcc
 	OP_NEXTPROGRAM   Op = 0xcd
@@ -320,7 +319,6 @@ var (
 		OP_MAXTIME:       {OP_MAXTIME, "MAXTIME", opMaxTime},
 		OP_TXREFDATAHASH: {OP_TXREFDATAHASH, "TXREFDATAHASH", opTxRefDataHash},
 		OP_REFDATAHASH:   {OP_REFDATAHASH, "REFDATAHASH", opRefDataHash},
-		OP_INDEX:         {OP_INDEX, "INDEX", opIndex},
 		OP_OUTPUTID:      {OP_OUTPUTID, "OUTPUTID", opOutputID},
 		OP_NONCE:         {OP_NONCE, "NONCE", opNonce},
 		OP_NEXTPROGRAM:   {OP_NEXTPROGRAM, "NEXTPROGRAM", opNextProgram},

@@ -41,7 +41,7 @@ func (c *Chain) GetBlock(ctx context.Context, height uint64) (*bc.Block, error) 
 //
 // After generating the block, the pending transaction pool will be
 // empty.
-func (c *Chain) GenerateBlock(ctx context.Context, prev *bc.Block, snapshot *state.Snapshot, now time.Time, txs []*bc.Tx) (b *bc.Block, result *state.Snapshot, err error) {
+func (c *Chain) GenerateBlock(ctx context.Context, prev *bc.Block, snapshot *state.Snapshot, now time.Time, txs []*bc.Transaction) (b *bc.Block, result *state.Snapshot, err error) {
 	timestampMS := bc.Millis(now)
 	if timestampMS < prev.TimestampMS {
 		return nil, nil, fmt.Errorf("timestamp %d is earlier than prevblock timestamp %d", timestampMS, prev.TimestampMS)
@@ -216,7 +216,7 @@ func NewInitialBlock(pubkeys []ed25519.PublicKey, nSigs int, timestamp time.Time
 		return nil, err
 	}
 
-	root, err := validation.CalcMerkleRoot([]*bc.Tx{}) // calculate the zero value of the tx merkle root
+	root, err := validation.CalcMerkleRoot([]*bc.Transaction{}) // calculate the zero value of the tx merkle root
 	if err != nil {
 		return nil, errors.Wrap(err, "calculating zero value of tx merkle root")
 	}

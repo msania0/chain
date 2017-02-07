@@ -97,10 +97,8 @@ func TestBlockTime(t *testing.T) {
 
 func TestOutputIDAndNonceOp(t *testing.T) {
 	var zeroHash bc.Hash
-	outputID := bc.OutputID{
-		Hash: bc.Hash{
-			3, 2, 1,
-		},
+	outputID := bc.Hash{
+		3, 2, 1,
 	}
 	nonce := []byte{36, 37, 38}
 	tx := bc.NewTx(bc.TxData{
@@ -167,7 +165,7 @@ func TestIntrospectionOps(t *testing.T) {
 	tx := bc.NewTx(bc.TxData{
 		ReferenceData: []byte("txref"),
 		Inputs: []*bc.TxInput{
-			bc.NewSpendInput(bc.OutputID{}, nil, bc.AssetID{1}, 5, []byte("spendprog"), []byte("ref")),
+			bc.NewSpendInput(bc.Hash{}, nil, bc.AssetID{1}, 5, []byte("spendprog"), []byte("ref")),
 			bc.NewIssuanceInput(nil, 6, nil, bc.Hash{}, []byte("issueprog"), nil, nil),
 		},
 		Outputs: []*bc.TxOutput{
@@ -504,7 +502,7 @@ func TestIntrospectionOps(t *testing.T) {
 				runLimit: 0,
 				tx:       tx,
 				txContext: bc.VMContext{
-					OutputID: &bc.OutputID{},
+					OutputID: &bc.Hash{},
 				},
 			},
 			wantErr: ErrRunLimitExceeded,

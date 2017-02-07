@@ -95,7 +95,7 @@ func (a *spendAction) Build(ctx context.Context, b *txbuilder.TemplateBuilder) e
 	return nil
 }
 
-func (m *Manager) NewSpendUTXOAction(outputID bc.OutputID) txbuilder.Action {
+func (m *Manager) NewSpendUTXOAction(outputID bc.Hash) txbuilder.Action {
 	return &spendUTXOAction{
 		accounts: m,
 		OutputID: &outputID,
@@ -110,33 +110,20 @@ func (m *Manager) DecodeSpendUTXOAction(data []byte) (txbuilder.Action, error) {
 
 type spendUTXOAction struct {
 	accounts *Manager
-	OutputID *bc.OutputID `json:"output_id"`
-	TxHash   *bc.Hash     `json:"transaction_id"`
-	TxOut    *uint32      `json:"position"`
+	OutputID *bc.Hash `json:"output_id"`
+	TxHash   *bc.Hash `json:"transaction_id"`
 
 	ReferenceData chainjson.Map `json:"reference_data"`
 	ClientToken   *string       `json:"client_token"`
 }
 
 func (a *spendUTXOAction) Build(ctx context.Context, b *txbuilder.TemplateBuilder) error {
-	var outid bc.OutputID
+	var outid bc.Hash
 
-	if a.OutputID != nil {
-		outid = *a.OutputID
-	} else if a.TxHash != nil && a.TxOut != nil {
-		// This is compatibility layer - legacy apps can spend outputs via the raw <txid:index> pair.
-		q := `SELECT output_id FROM account_utxos WHERE tx_hash=$1 AND index=$2`
-		err := a.accounts.utxoDB.db.QueryRow(ctx, q, *a.TxHash, *a.TxOut).Scan(&outid)
-		if err == sql.ErrNoRows {
-			return pg.ErrUserInputNotFound
-		} else if err != nil {
-			return err
-		}
-	} else {
-		// Note: here we do not attempt to check if txid is present, but position is missing, or vice versa.
-		// Instead, the user has to update their code to use the new API anyway.
+	if a.OutputID == nil {
 		return txbuilder.MissingFieldsError("output_id")
 	}
+	outid = *a.OutputID
 
 	res, err := a.accounts.utxoDB.ReserveUTXO(ctx, outid, a.ClientToken, b.MaxTime())
 	if err != nil {

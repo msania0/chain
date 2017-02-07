@@ -34,7 +34,7 @@ type Generator struct {
 	signers []BlockSigner
 
 	mu         sync.Mutex
-	pool       []*bc.Tx // in topological order
+	pool       []*bc.Transaction // in topological order
 	poolHashes map[bc.Hash]bool
 
 	// latestBlock and latestSnapshot are current as long as this
@@ -61,25 +61,26 @@ func New(
 
 // PendingTxs returns all of the pendings txs that will be
 // included in the generator's next block.
-func (g *Generator) PendingTxs() []*bc.Tx {
+func (g *Generator) PendingTxs() []*bc.Transaction {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	txs := make([]*bc.Tx, len(g.pool))
+	txs := make([]*bc.Transaction, len(g.pool))
 	copy(txs, g.pool)
 	return txs
 }
 
 // Submit adds a new pending tx to the pending tx pool.
-func (g *Generator) Submit(ctx context.Context, tx *bc.Tx) error {
+func (g *Generator) Submit(ctx context.Context, tx *bc.Transaction) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	if g.poolHashes[tx.ID] {
+	id := tx.ID()
+	if g.poolHashes[id] {
 		return nil
 	}
 
-	g.poolHashes[tx.ID] = true
+	g.poolHashes[id] = true
 	g.pool = append(g.pool, tx)
 	return nil
 }

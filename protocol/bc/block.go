@@ -26,7 +26,7 @@ const (
 // and the transactions it contains.
 type Block struct {
 	BlockHeader
-	Transactions []*Tx
+	Transactions []*Transaction
 }
 
 // MarshalText fulfills the json.Marshaler interface.
@@ -85,15 +85,12 @@ func (b *Block) readFrom(r io.Reader) error {
 			return errors.Wrap(err, "reading number of transactions")
 		}
 		for ; n > 0; n-- {
-			var data TxData
-			err = data.readFrom(r)
+			var tx Transaction
+			err = tx.readFrom(r)
 			if err != nil {
 				return errors.Wrapf(err, "reading transaction %d", len(b.Transactions))
 			}
-			// TODO(kr): store/reload hashes;
-			// don't compute here if not necessary.
-			tx := NewTx(data)
-			b.Transactions = append(b.Transactions, tx)
+			b.Transactions = append(b.Transactions, &tx)
 		}
 	}
 	return nil
@@ -105,15 +102,24 @@ func (b *Block) WriteTo(w io.Writer) (int64, error) {
 	return ew.Written(), ew.Err()
 }
 
-// assumes w has sticky errors
-func (b *Block) writeTo(w io.Writer, serflags uint8) {
-	b.BlockHeader.writeTo(w, serflags)
+func (b *Block) writeTo(w io.Writer, serflags uint8) error {
+	err := b.BlockHeader.writeTo(w, serflags)
+	if err != nil {
+		return errors.Wrap(err, "writing blockheader serflags")
+	}
 	if serflags&SerBlockTransactions == SerBlockTransactions {
-		blockchain.WriteVarint31(w, uint64(len(b.Transactions))) // TODO(bobg): check and return error
-		for _, tx := range b.Transactions {
-			tx.WriteTo(w)
+		_, err = blockchain.WriteVarint31(w, uint64(len(b.Transactions)))
+		if err != nil {
+			return errors.Wrap(err, "writing number of transactions")
+		}
+		for i, tx := range b.Transactions {
+			err = tx.writeTo(w)
+			if err != nil {
+				return errors.Wrapf(err, "writing transaction %d", i)
+			}
 		}
 	}
+	return nil
 }
 
 // NewBlockVersion is the version to use when creating new blocks.

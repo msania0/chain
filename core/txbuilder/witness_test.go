@@ -15,7 +15,7 @@ import (
 )
 
 func TestInferConstraints(t *testing.T) {
-	outputID := bc.OutputID{Hash: bc.Hash{255}}
+	outputID := bc.Hash{255}
 	tpl := &Template{
 		Transaction: &bc.Tx{TxData: bc.TxData{
 			Inputs: []*bc.TxInput{

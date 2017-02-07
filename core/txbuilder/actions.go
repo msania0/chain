@@ -44,8 +44,11 @@ func (a *controlReceiverAction) Build(ctx context.Context, b *TemplateBuilder) e
 	}
 
 	b.RestrictMaxTime(a.Receiver.ExpiresAt)
-	out := bc.NewTxOutput(a.AssetID, a.Amount, a.Receiver.ControlProgram, a.ReferenceData)
-	return b.AddOutput(out)
+	var dataRef *bc.EntryRef
+	if len(a.ReferenceData) > 0 {
+		dataRef = &bc.EntryRef{Entry: bc.NewData(bc.HashData(a.ReferenceData))}
+	}
+	return b.AddOutput(a.AssetAmount, bc.Program{VMVersion: 1, Code: a.Receiver.ControlProgram}, dataRef)
 }
 
 func DecodeControlProgramAction(data []byte) (Action, error) {
@@ -71,9 +74,11 @@ func (a *controlProgramAction) Build(ctx context.Context, b *TemplateBuilder) er
 	if len(missing) > 0 {
 		return MissingFieldsError(missing...)
 	}
-
-	out := bc.NewTxOutput(a.AssetID, a.Amount, a.Program, a.ReferenceData)
-	return b.AddOutput(out)
+	var dataRef *bc.EntryRef
+	if len(a.ReferenceData) > 0 {
+		dataRef = &bc.EntryRef{Entry: bc.NewData(bc.HashData(a.ReferenceData))}
+	}
+	return b.AddOutput(a.AssetAmount, bc.Program{VMVersion: 1, Code: a.Program}, dataRef)
 }
 
 func DecodeSetTxRefDataAction(data []byte) (Action, error) {
@@ -115,7 +120,9 @@ func (a *retireAction) Build(ctx context.Context, b *TemplateBuilder) error {
 	if len(missing) > 0 {
 		return MissingFieldsError(missing...)
 	}
-
-	out := bc.NewTxOutput(a.AssetID, a.Amount, retirementProgram, a.ReferenceData)
-	return b.AddOutput(out)
+	var dataRef *bc.EntryRef
+	if len(a.ReferenceData) > 0 {
+		dataRef = &bc.EntryRef{Entry: bc.NewData(bc.HashData(a.ReferenceData))}
+	}
+	return b.AddRetirement(a.AssetAmount, dataRef)
 }

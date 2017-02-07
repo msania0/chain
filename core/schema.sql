@@ -189,7 +189,6 @@ CREATE TABLE account_control_programs (
 
 CREATE TABLE account_utxos (
     tx_hash bytea NOT NULL,
-    index integer NOT NULL,
     asset_id bytea NOT NULL,
     amount bigint NOT NULL,
     account_id text NOT NULL,
@@ -587,19 +586,11 @@ ALTER TABLE ONLY accounts
 
 
 --
--- Name: account_utxos_output_id_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY account_utxos
-    ADD CONSTRAINT account_utxos_output_id_key UNIQUE (output_id);
-
-
---
 -- Name: account_utxos_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY account_utxos
-    ADD CONSTRAINT account_utxos_pkey PRIMARY KEY (tx_hash, index);
+    ADD CONSTRAINT account_utxos_pkey PRIMARY KEY (output_id);
 
 
 --
@@ -897,3 +888,4 @@ CREATE INDEX signers_type_id_idx ON signers USING btree (type, id);
 insert into migrations (filename, hash) values ('2017-02-03.0.core.schema-snapshot.sql', '1d55668affe0be9f3c19ead9d67bc75cfd37ec430651434d0f2af2706d9f08cd');
 insert into migrations (filename, hash) values ('2017-02-07.0.query.non-null-alias.sql', '17028a0bdbc95911e299dc65fe641184e54c87a0d07b3c576d62d023b9a8defc');
 insert into migrations (filename, hash) values ('2017-02-16.0.query.spent-output.sql', '7cd52095b6f202d7a25ffe666b7b7d60e7700d314a7559b911e236b72661a738');
+insert into migrations (filename, hash) values ('2017-02-20.0.core.drop-account_utxo-index.sql', 'a6c581ad28c0d4283deb9289206eb7377793169df797947c88d78c5bd7590ad0');

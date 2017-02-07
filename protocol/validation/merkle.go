@@ -14,7 +14,7 @@ var (
 
 // CalcMerkleRoot creates a merkle tree from a slice of transactions
 // and returns the root hash of the tree.
-func CalcMerkleRoot(transactions []*bc.Tx) (root bc.Hash, err error) {
+func CalcMerkleRoot(transactions []*bc.Transaction) (root bc.Hash, err error) {
 	switch {
 	case len(transactions) == 0:
 		sha3pool.Sum256(root[:], nil)
@@ -25,7 +25,8 @@ func CalcMerkleRoot(transactions []*bc.Tx) (root bc.Hash, err error) {
 		defer sha3pool.Put256(h)
 
 		h.Write(leafPrefix)
-		h.Write(transactions[0].ID[:])
+		id := transactions[0].ID()
+		h.Write(id[:])
 		h.Read(root[:])
 		return root, nil
 

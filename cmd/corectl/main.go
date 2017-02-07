@@ -19,7 +19,6 @@ import (
 	chainjson "chain/encoding/json"
 	"chain/env"
 	"chain/log"
-	_ "chain/protocol/tx" // for BlockHeaderHashFunc
 )
 
 // config vars

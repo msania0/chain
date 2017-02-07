@@ -28,16 +28,13 @@ var (
 // Build partners then satisfy and consume inputs and destinations.
 // The final party must ensure that the transaction is
 // balanced before calling finalize.
-func Build(ctx context.Context, tx *bc.TxData, actions []Action, maxTime time.Time) (*Template, error) {
-	builder := TemplateBuilder{
-		base:    tx,
-		maxTime: maxTime,
-	}
+func Build(ctx context.Context, tx *bc.Transaction, actions []Action, maxTime time.Time) (*Template, error) {
+	builder := NewBuilder(maxTime, tx)
 
 	// Build all of the actions, updating the builder.
 	var errs []error
 	for i, action := range actions {
-		err := action.Build(ctx, &builder)
+		err := action.Build(ctx, builder)
 		if err != nil {
 			err = errors.WithData(err, "index", i)
 			errs = append(errs, err)
@@ -81,31 +78,52 @@ func KeyIDs(xpubs []chainkd.XPub, path [][]byte) []KeyID {
 }
 
 func Sign(ctx context.Context, tpl *Template, xpubs []chainkd.XPub, signFn SignFunc) error {
-	for i, sigInst := range tpl.SigningInstructions {
+	for hash, sigInst := range tpl.SigningInstructions {
 		for j, c := range sigInst.WitnessComponents {
-			err := c.Sign(ctx, tpl, uint32(i), xpubs, signFn)
+			err := c.Sign(ctx, tpl, hash, xpubs, signFn)
 			if err != nil {
-				return errors.WithDetailf(err, "adding signature(s) to witness component %d of input %d", j, i)
+				return errors.WithDetailf(err, "adding signature(s) to witness component %d of input %x", j, hash[:])
 			}
 		}
 	}
 	return materializeWitnesses(tpl)
 }
 
-func checkBlankCheck(tx *bc.TxData) error {
+func checkBlankCheck(tx *bc.Transaction) error {
 	assetMap := make(map[bc.AssetID]int64)
 	var ok bool
-	for _, in := range tx.Inputs {
-		asset := in.AssetID() // AssetID() is calculated for IssuanceInputs, so grab once
-		assetMap[asset], ok = checked.AddInt64(assetMap[asset], int64(in.Amount()))
+	for _, issRef := range tx.Issuances {
+		iss := issRef.Entry.(*bc.Issuance)
+		assetID := iss.AssetID()
+		assetMap[assetID], ok = checked.AddInt64(assetMap[assetID], int64(iss.Amount()))
 		if !ok {
-			return errors.WithDetailf(ErrBadAmount, "cumulative amounts for asset %s overflow the allowed asset amount 2^63", asset)
+			return errors.WithDetailf(ErrBadAmount, "cumulative amounts for asset %s overflow the allowed asset amount 2^63", assetID)
 		}
 	}
-	for _, out := range tx.Outputs {
-		assetMap[out.AssetID], ok = checked.SubInt64(assetMap[out.AssetID], int64(out.Amount))
+	for _, spRef := range tx.Spends {
+		sp := spRef.Entry.(*bc.Spend)
+		spentOutputRef := sp.SpentOutput()
+		spentOutput := spentOutputRef.Entry.(*bc.Output)
+		assetID := spentOutput.AssetID()
+		assetMap[assetID], ok = checked.AddInt64(assetMap[assetID], int64(spentOutput.Amount()))
 		if !ok {
-			return errors.WithDetailf(ErrBadAmount, "cumulative amounts for asset %s overflow the allowed asset amount 2^63", out.AssetID)
+			return errors.WithDetailf(ErrBadAmount, "cumulative amounts for asset %s overflow the allowed asset amount 2^63", assetID)
+		}
+	}
+	for _, outRef := range tx.Outputs {
+		out := outRef.Entry.(*bc.Output)
+		assetID := out.AssetID()
+		assetMap[assetID], ok = checked.SubInt64(assetMap[assetID], int64(out.Amount()))
+		if !ok {
+			return errors.WithDetailf(ErrBadAmount, "cumulative amounts for asset %s overflow the allowed asset amount 2^63", assetID)
+		}
+	}
+	for _, retRef := range tx.Retirements {
+		ret := retRef.Entry.(*bc.Retirement)
+		assetID := ret.AssetID()
+		assetMap[assetID], ok = checked.SubInt64(assetMap[assetID], int64(ret.Amount()))
+		if !ok {
+			return errors.WithDetailf(ErrBadAmount, "cumulative amounts for asset %s overflow the allowed asset amount 2^63", assetID)
 		}
 	}
 
@@ -120,17 +138,26 @@ func checkBlankCheck(tx *bc.TxData) error {
 	}
 
 	// 4 possible cases here:
-	// 1. requiresOutputs - false requiresInputs - false
+	//
+	// requiresOutputs  requiresInputs
+	// ---------------  --------------
+	//  false            false
 	//    This is a balanced transaction with no free assets to consume.
 	//    It could potentially be a complete transaction.
-	// 2. requiresOutputs - true requiresInputs - false
-	//    This is an unbalanced transaction with free assets to consume
-	// 3. requiresOutputs - false requiresInputs - true
-	//    This is an unbalanced transaction with a requiring assets to be spent
-	// 4. requiresOutputs - true requiresInputs - true
+	//
+	//  true             false
+	//    This is an unbalanced transaction with free assets to consume.
+	//
+	//  false            true
+	//    This is an unbalanced transaction requiring assets to be spent.
+	//
+	//  true             true
 	//    This is an unbalanced transaction with free assets to consume
 	//    and requiring assets to be spent.
-	// The only case that needs to be protected against is 2.
+	//
+	// The only case that needs to be protected against is 2 ("free
+	// assets to consume").
+
 	if requiresOutputs && !requiresInputs {
 		return errors.Wrap(ErrBlankCheck)
 	}

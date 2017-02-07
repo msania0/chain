@@ -9,7 +9,7 @@ import (
 	"chain/crypto/ed25519/chainkd"
 	chainjson "chain/encoding/json"
 	"chain/protocol/bc"
-	"chain/protocol/vmutil"
+	"chain/protocol/vm"
 )
 
 type AnnotatedTx struct {
@@ -34,7 +34,7 @@ type AnnotatedInput struct {
 	Amount          uint64             `json:"amount"`
 	IssuanceProgram chainjson.HexBytes `json:"issuance_program,omitempty"`
 	ControlProgram  chainjson.HexBytes `json:"control_program,omitempty"`
-	SpentOutputID   *bc.OutputID       `json:"spent_output_id,omitempty"`
+	SpentOutputID   *bc.Hash           `json:"spent_output_id,omitempty"`
 	SpentOutput     *SpentOutput       `json:"spent_output,omitempty"`
 	AccountID       string             `json:"account_id,omitempty"`
 	AccountAlias    string             `json:"account_alias,omitempty"`
@@ -44,11 +44,14 @@ type AnnotatedInput struct {
 }
 
 type AnnotatedOutput struct {
-	Type            string             `json:"type"`
-	Purpose         string             `json:"purpose,omitempty"`
-	OutputID        bc.OutputID        `json:"id"`
-	TransactionID   *bc.Hash           `json:"transaction_id,omitempty"`
-	Position        uint32             `json:"position"`
+	Type          string  `json:"type"`
+	Purpose       string  `json:"purpose,omitempty"`
+	OutputID      bc.Hash `json:"id"`
+	TransactionID bc.Hash `json:"transaction_id,omitempty"`
+
+	// Position is the index of this output within its transaction's header's Results list
+	Position uint32 `json:"position"`
+
 	AssetID         bc.AssetID         `json:"asset_id"`
 	AssetAlias      string             `json:"asset_alias,omitempty"`
 	AssetDefinition *json.RawMessage   `json:"asset_definition"`
@@ -65,7 +68,7 @@ type AnnotatedOutput struct {
 
 type SpentOutput struct {
 	TransactionID bc.Hash `json:"transaction_id"`
-	Position      uint32  `json:"position"`
+	OutputID      bc.Hash `json:"id"`
 }
 
 type AnnotatedAccount struct {
@@ -120,90 +123,109 @@ func (b *Bool) UnmarshalJSON(raw []byte) error {
 
 var emptyJSONObject = json.RawMessage(`{}`)
 
-func buildAnnotatedTransaction(orig *bc.Tx, b *bc.Block, indexInBlock uint32, outpoints map[bc.OutputID]bc.Outpoint) *AnnotatedTx {
+func buildAnnotatedTransaction(orig *bc.Transaction, b *bc.Block, indexInBlock uint32) *AnnotatedTx {
 	tx := &AnnotatedTx{
-		ID:            orig.ID,
+		ID:            orig.ID(),
 		Timestamp:     b.Time(),
 		BlockID:       b.Hash(),
 		BlockHeight:   b.Height,
 		Position:      indexInBlock,
 		ReferenceData: &emptyJSONObject,
-		Inputs:        make([]*AnnotatedInput, 0, len(orig.Inputs)),
-		Outputs:       make([]*AnnotatedOutput, 0, len(orig.Outputs)),
+		Inputs:        make([]*AnnotatedInput, 0, len(orig.Spends)+len(orig.Issuances)),
+		Outputs:       make([]*AnnotatedOutput, 0, len(orig.Outputs)+len(orig.Retirements)),
 	}
 	if len(orig.ReferenceData) > 0 {
 		referenceData := json.RawMessage(orig.ReferenceData)
 		tx.ReferenceData = &referenceData
 	}
 
-	for _, in := range orig.Inputs {
-		tx.Inputs = append(tx.Inputs, buildAnnotatedInput(in, outpoints))
+	for _, in := range orig.Spends {
+		tx.Inputs = append(tx.Inputs, buildAnnotatedSpend(in))
 	}
-	for i := range orig.Outputs {
-		tx.Outputs = append(tx.Outputs, buildAnnotatedOutput(orig, uint32(i)))
+	for _, in := range orig.Issuances {
+		tx.Inputs = append(tx.Inputs, buildAnnotatedIssuance(in))
 	}
+
+	for i, resultRef := range orig.Results() {
+		var aout *AnnotatedOutput
+		switch res := resultRef.Entry.(type) {
+		case *bc.Output:
+			aout = buildAnnotatedOutput(res, resultRef.Hash(), uint32(i))
+		case *bc.Retirement:
+			aout = buildAnnotatedRetirement(res, resultRef.Hash(), uint32(i))
+		}
+		tx.Outputs = append(tx.Outputs, aout)
+	}
+
 	return tx
 }
 
-func buildAnnotatedInput(orig *bc.TxInput, outpoints map[bc.OutputID]bc.Outpoint) *AnnotatedInput {
+func buildAnnotatedSpend(orig *bc.EntryRef) *AnnotatedInput {
+	sp := orig.Entry.(*bc.Spend)
+	spentRef := sp.SpentOutput()
+	spentOutput := spentRef.Entry.(*bc.Output)
+	prevoutID := spentRef.Hash()
 	in := &AnnotatedInput{
-		AssetID:         orig.AssetID(),
-		Amount:          orig.Amount(),
+		Type:            "spend",
+		AssetID:         spentOutput.AssetID(),
+		Amount:          spentOutput.Amount(),
 		AssetDefinition: &emptyJSONObject,
 		AssetTags:       &emptyJSONObject,
 		ReferenceData:   &emptyJSONObject,
+		ControlProgram:  spentOutput.ControlProgram().Code, // xxx should annotated input preserve the vmversion field?
+		SpentOutputID:   &prevoutID,
 	}
 
-	if len(orig.ReferenceData) > 0 {
-		referenceData := json.RawMessage(orig.ReferenceData)
-		in.ReferenceData = &referenceData
-	}
+	// xxx how to populate in.ReferenceData? the blockchain no longer stores bare refdata, only its hash
 
-	if orig.IsIssuance() {
-		prog := orig.IssuanceProgram()
-		in.Type = "issue"
-		in.IssuanceProgram = prog
-	} else {
-		prevoutID := orig.SpentOutputID()
-		in.Type = "spend"
-		in.ControlProgram = orig.ControlProgram()
-		in.SpentOutputID = &prevoutID
-
-		outpoint, ok := outpoints[prevoutID]
-		if ok {
-			in.SpentOutput = &SpentOutput{
-				TransactionID: outpoint.Hash,
-				Position:      outpoint.Index,
-			}
-		}
-
-	}
 	return in
 }
 
-func buildAnnotatedOutput(tx *bc.Tx, idx uint32) *AnnotatedOutput {
-	orig := tx.Outputs[idx]
-	outid := tx.OutputID(idx)
-	out := &AnnotatedOutput{
-		OutputID:        outid,
-		Position:        idx,
-		AssetID:         orig.AssetID,
+func buildAnnotatedIssuance(orig *bc.EntryRef) *AnnotatedInput {
+	iss := orig.Entry.(*bc.Issuance)
+	in := &AnnotatedInput{
+		Type:            "issue",
+		AssetID:         iss.AssetID(),
+		Amount:          iss.Amount(),
 		AssetDefinition: &emptyJSONObject,
 		AssetTags:       &emptyJSONObject,
-		Amount:          orig.Amount,
-		ControlProgram:  orig.ControlProgram,
+		ReferenceData:   &emptyJSONObject,
+		IssuanceProgram: iss.IssuanceProgram().Code, // xxx should annotated input preserve the vmversion field?
+	}
+
+	// xxx how to populate in.ReferenceData? the blockchain no longer stores bare refdata, only its hash
+
+	return in
+}
+
+func buildAnnotatedOutput(out *bc.Output, outputID bc.Hash, pos uint32) *AnnotatedOutput {
+	// xxx how to populate ReferenceData? the blockchain no longer stores bare refdata, only its hash
+	return &AnnotatedOutput{
+		Type:            "control",
+		OutputID:        outputID,
+		Position:        pos,
+		AssetID:         out.AssetID(),
+		AssetDefinition: &emptyJSONObject,
+		AssetTags:       &emptyJSONObject,
+		Amount:          out.Amount(),
+		ControlProgram:  out.ControlProgram().Code, // xxx should annotated output preserve the vmversion field?
 		ReferenceData:   &emptyJSONObject,
 	}
-	if len(orig.ReferenceData) > 0 {
-		referenceData := json.RawMessage(orig.ReferenceData)
-		out.ReferenceData = &referenceData
+}
+
+func buildAnnotatedRetirement(ret *bc.Retirement, outputID bc.Hash, pos uint32) *AnnotatedOutput {
+	// xxx how to populate ReferenceData? the blockchain no longer stores bare refdata, only its hash
+	return &AnnotatedOutput{
+		Type:            "retire",
+		OutputID:        outputID,
+		Position:        pos,
+		AssetID:         ret.AssetID(),
+		AssetDefinition: &emptyJSONObject,
+		AssetTags:       &emptyJSONObject,
+		Amount:          ret.Amount(),
+		ControlProgram:  []byte{byte(vm.OP_FALSE)}, // xxx should annotated output preserve the vmversion field?
+		ReferenceData:   &emptyJSONObject,
 	}
-	if vmutil.IsUnspendable(out.ControlProgram) {
-		out.Type = "retire"
-	} else {
-		out.Type = "control"
-	}
-	return out
 }
 
 // localAnnotator depends on the asset and account annotators and

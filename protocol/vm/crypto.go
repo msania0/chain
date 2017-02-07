@@ -7,6 +7,7 @@ import (
 	"golang.org/x/crypto/sha3"
 
 	"chain/crypto/ed25519"
+	"chain/crypto/sha3pool"
 	"chain/math/checked"
 )
 
@@ -134,7 +135,11 @@ func opTxSigHash(vm *virtualMachine) error {
 	if err != nil {
 		return err
 	}
-	h := vm.txContext.TxSigHash
+
+	hasher := sha3pool.Get256()
+	defer sha3pool.Put256(hasher)
+
+	h := vm.tx.SigHash(vm.input.Hash())
 	return vm.push(h[:], false)
 }
 

@@ -76,23 +76,20 @@ func (ind *Indexer) insertAnnotatedTxs(ctx context.Context, b *bc.Block) ([]*Ann
 		outputIDs        = pq.ByteaArray(make([][]byte, 0))
 	)
 	for _, tx := range b.Transactions {
-		for _, in := range tx.Inputs {
-			if !in.IsIssuance() {
-				outputIDs = append(outputIDs, in.SpentOutputID().Bytes())
-			}
+		for _, spRef := range tx.Spends {
+			sp := spRef.Entry.(*bc.Spend)
+			spentOutputRef := sp.SpentOutput()
+			spentOutputID := spentOutputRef.Hash()
+			outputIDs = append(outputIDs, spentOutputID.Bytes())
 		}
-	}
-	outpoints, err := ind.loadOutpoints(ctx, outputIDs)
-	if err != nil {
-		return nil, err
 	}
 
 	// Build the fully annotated transactions.
 	for pos, tx := range b.Transactions {
-		annotatedTxs = append(annotatedTxs, buildAnnotatedTransaction(tx, b, uint32(pos), outpoints))
+		annotatedTxs = append(annotatedTxs, buildAnnotatedTransaction(tx, b, uint32(pos)))
 	}
 	for _, annotator := range ind.annotators {
-		err = annotator(ctx, annotatedTxs)
+		err := annotator(ctx, annotatedTxs)
 		if err != nil {
 			return nil, errors.Wrap(err, "adding external annotations")
 		}
@@ -120,7 +117,7 @@ func (ind *Indexer) insertAnnotatedTxs(ctx context.Context, b *bc.Block) ([]*Ann
 			unnest($6::jsonb[]), unnest($7::boolean[]), unnest($8::jsonb[])
 		ON CONFLICT (block_height, tx_pos) DO NOTHING;
 	`
-	_, err = ind.db.Exec(ctx, insertQ, b.Height, b.Hash(), b.Time(), positions,
+	_, err := ind.db.Exec(ctx, insertQ, b.Height, b.Hash(), b.Time(), positions,
 		hashes, annotatedTxBlobs, locals, referenceDatas)
 	if err != nil {
 		return nil, errors.Wrap(err, "inserting annotated_txs to db")
@@ -204,26 +201,6 @@ func (ind *Indexer) insertAnnotatedInputs(ctx context.Context, b *bc.Block, anno
 	return errors.Wrap(err, "batch inserting annotated inputs")
 }
 
-func (ind *Indexer) loadOutpoints(ctx context.Context, outputIDs pq.ByteaArray) (map[bc.OutputID]bc.Outpoint, error) {
-	const q = `
-		SELECT tx_hash, output_index, output_id
-		FROM annotated_outputs
-		WHERE output_id IN (SELECT unnest($1::bytea[]))
-	`
-	results := make(map[bc.OutputID]bc.Outpoint)
-	err := pg.ForQueryRows(ctx, ind.db, q, outputIDs, func(txHash bc.Hash, outputIndex uint32, outid bc.Hash) {
-		oid := bc.OutputID{outid}
-		results[oid] = bc.Outpoint{
-			Hash:  txHash,
-			Index: outputIndex,
-		}
-	})
-	if err != nil {
-		return nil, errors.Wrap(err)
-	}
-	return results, nil
-}
-
 func (ind *Indexer) insertAnnotatedOutputs(ctx context.Context, b *bc.Block, annotatedTxs []*AnnotatedTx) error {
 	var (
 		outputIDs              pq.ByteaArray
@@ -247,18 +224,24 @@ func (ind *Indexer) insertAnnotatedOutputs(ctx context.Context, b *bc.Block, ann
 		prevoutIDs             pq.ByteaArray
 	)
 	for pos, tx := range b.Transactions {
-		for _, in := range tx.Inputs {
-			if !in.IsIssuance() {
-				prevoutID := in.SpentOutputID()
-				prevoutIDs = append(prevoutIDs, prevoutID.Bytes())
-			}
+		txID := tx.ID()
+
+		for _, spRef := range tx.Spends {
+			sp := spRef.Entry.(*bc.Spend)
+			spentOutputRef := sp.SpentOutput()
+			spentOutputID := spentOutputRef.Hash()
+			prevoutIDs = append(prevoutIDs, spentOutputID.Bytes())
 		}
 
 		for outIndex, out := range annotatedTxs[pos].Outputs {
-			outputIDs = append(outputIDs, out.OutputID.Hash[:])
+			if out.Type == "retire" {
+				continue
+			}
+
+			outputIDs = append(outputIDs, out.OutputID[:])
 			outputTxPositions = append(outputTxPositions, uint32(pos))
 			outputIndexes = append(outputIndexes, uint32(outIndex))
-			outputTxHashes = append(outputTxHashes, tx.ID[:])
+			outputTxHashes = append(outputTxHashes, txID[:])
 			outputTypes = append(outputTypes, out.Type)
 			outputPurposes = append(outputPurposes, out.Purpose)
 			outputAssetIDs = append(outputAssetIDs, out.AssetID[:])

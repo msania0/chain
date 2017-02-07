@@ -1,40 +1,47 @@
 package bc
 
-// SpendInput satisfies the TypedInput interface and represents a spend transaction.
-type SpendInput struct {
-	// Commitment
-	SpentOutputID OutputID
-	OutputCommitment
-
-	// The unconsumed suffix of the output commitment
-	OutputCommitmentSuffix []byte
-
-	// Witness
-	Arguments [][]byte
+type Spend struct {
+	body struct {
+		SpentOutput *EntryRef
+		Data        *EntryRef
+		ExtHash     Hash
+	}
+	witness struct {
+		Destination valueDestination
+		Arguments   [][]byte
+		ExtHash     Hash
+	}
 }
 
-func (si *SpendInput) IsIssuance() bool { return false }
+const typeSpend = "spend1"
 
-func NewSpendInput(prevoutID OutputID, arguments [][]byte, assetID AssetID, amount uint64, controlProgram, referenceData []byte) *TxInput {
-	const (
-		vmver    = 1
-		assetver = 1
-	)
-	oc := OutputCommitment{
-		AssetAmount: AssetAmount{
-			AssetID: assetID,
-			Amount:  amount,
-		},
-		VMVersion:      vmver,
-		ControlProgram: controlProgram,
-	}
-	return &TxInput{
-		AssetVersion:  assetver,
-		ReferenceData: referenceData,
-		TypedInput: &SpendInput{
-			SpentOutputID:    prevoutID,
-			OutputCommitment: oc,
-			Arguments:        arguments,
-		},
-	}
+func (Spend) Type() string            { return typeSpend }
+func (s *Spend) Body() interface{}    { return &s.body }
+func (s *Spend) Witness() interface{} { return &s.witness }
+
+func (s *Spend) SpentOutput() *EntryRef {
+	return s.body.SpentOutput
+}
+
+func (s *Spend) Data() *EntryRef {
+	return s.body.Data
+}
+
+func (s *Spend) RefDataHash() Hash {
+	return refDataHash(s.body.Data)
+}
+
+func (s *Spend) Arguments() [][]byte {
+	return s.witness.Arguments
+}
+
+func (s *Spend) SetArguments(args [][]byte) {
+	s.witness.Arguments = args
+}
+
+func newSpend(spentOutput, data *EntryRef) *Spend {
+	s := new(Spend)
+	s.body.SpentOutput = spentOutput
+	s.body.Data = data
+	return s
 }

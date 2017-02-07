@@ -72,9 +72,9 @@ func (m *Manager) indexAnnotatedAccount(ctx context.Context, a *Account) error {
 }
 
 type rawOutput struct {
-	bc.OutputID
+	outputID bc.Hash
 	bc.AssetAmount
-	ControlProgram []byte
+	controlProgram []byte
 	txHash         bc.Hash
 	outputIndex    uint32
 }
@@ -107,18 +107,24 @@ func (m *Manager) processBlock(ctx context.Context, b *bc.Block) error {
 func (m *Manager) indexAccountUTXOs(ctx context.Context, b *bc.Block) error {
 	// Upsert any UTXOs belonging to accounts managed by this Core.
 	outs := make([]*rawOutput, 0, len(b.Transactions))
-	blockPositions := make(map[bc.Hash]uint32, len(b.Transactions))
 	for i, tx := range b.Transactions {
-		blockPositions[tx.ID] = uint32(i)
-		for j, out := range tx.Outputs {
-			out := &rawOutput{
-				OutputID:       tx.OutputID(uint32(j)),
-				AssetAmount:    out.AssetAmount,
-				ControlProgram: out.ControlProgram,
-				txHash:         tx.ID,
-				outputIndex:    uint32(j),
+		for j, resultRef := range tx.Results() {
+			raw := &rawOutput{
+				txHash:   tx.ID(),
+				position: j,
+				outputID: resultRef.Hash(),
 			}
-			outs = append(outs, out)
+			switch res := resultRef.Entry.(type) {
+			case *bc.Output:
+				raw.AssetAmount = bc.AssetAmount{
+					AssetID: res.AssetID(),
+					Amount:  res.Amount(),
+				}
+				raw.controlProgram = out.ControlProgram().Code // xxx preserve vmversion?
+			case *bc.Retirement:
+				// xxx should this loop include or exclude retirements?
+			}
+			outs = append(outs, raw)
 		}
 	}
 	accOuts, err := m.loadAccountInfo(ctx, outs)
@@ -126,7 +132,7 @@ func (m *Manager) indexAccountUTXOs(ctx context.Context, b *bc.Block) error {
 		return errors.Wrap(err, "loading account info from control programs")
 	}
 
-	err = m.upsertConfirmedAccountOutputs(ctx, accOuts, blockPositions, b)
+	err = m.upsertConfirmedAccountOutputs(ctx, accOuts, b)
 	if err != nil {
 		return errors.Wrap(err, "upserting confirmed account utxos")
 	}
@@ -196,10 +202,9 @@ func (m *Manager) loadAccountInfo(ctx context.Context, outs []*rawOutput) ([]*ac
 // upsertConfirmedAccountOutputs records the account data for confirmed utxos.
 // If the account utxo already exists (because it's from a local tx), the
 // block confirmation data will in the row will be updated.
-func (m *Manager) upsertConfirmedAccountOutputs(ctx context.Context, outs []*accountOutput, pos map[bc.Hash]uint32, block *bc.Block) error {
+func (m *Manager) upsertConfirmedAccountOutputs(ctx context.Context, outs []*accountOutput, block *bc.Block) error {
 	var (
 		txHash    pq.ByteaArray
-		index     pg.Uint32s
 		outputID  pq.ByteaArray
 		assetID   pq.ByteaArray
 		amount    pq.Int64Array
@@ -209,7 +214,6 @@ func (m *Manager) upsertConfirmedAccountOutputs(ctx context.Context, outs []*acc
 	)
 	for _, out := range outs {
 		txHash = append(txHash, out.txHash[:])
-		index = append(index, out.outputIndex)
 		outputID = append(outputID, out.OutputID.Bytes())
 		assetID = append(assetID, out.AssetID[:])
 		amount = append(amount, int64(out.Amount))
@@ -219,15 +223,14 @@ func (m *Manager) upsertConfirmedAccountOutputs(ctx context.Context, outs []*acc
 	}
 
 	const q = `
-		INSERT INTO account_utxos (tx_hash, index, output_id, asset_id, amount, account_id, control_program_index,
+		INSERT INTO account_utxos (tx_hash, output_id, asset_id, amount, account_id, control_program_index,
 			control_program, confirmed_in)
-		SELECT unnest($1::bytea[]), unnest($2::bigint[]), unnest($3::bytea[]), unnest($4::bytea[]),  unnest($5::bigint[]),
-			   unnest($6::text[]), unnest($7::bigint[]), unnest($8::bytea[]), $9
-		ON CONFLICT (tx_hash, index) DO NOTHING
+		SELECT unnest($1::bytea[]), unnest($2::bytea[]), unnest($3::bytea[]), unnest($4::bigint[]),
+			   unnest($5::text[]), unnest($6::bigint[]), unnest($7::bytea[]), $8
+		ON CONFLICT (output_id) DO NOTHING
 	`
 	_, err := m.db.Exec(ctx, q,
 		txHash,
-		index,
 		outputID,
 		assetID,
 		amount,
