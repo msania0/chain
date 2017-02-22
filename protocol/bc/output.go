@@ -2,7 +2,7 @@ package bc
 
 type Output struct {
 	body struct {
-		Source         valueSource
+		Source         ValueSource
 		ControlProgram Program
 		Data           Hash
 		ExtHash        Hash
@@ -31,7 +31,7 @@ func (o *Output) Data() Hash {
 	return o.body.Data
 }
 
-func NewOutput(source valueSource, controlProgram Program, data Hash) *Output {
+func NewOutput(source ValueSource, controlProgram Program, data Hash) *Output {
 	out := new(Output)
 	out.body.Source = source
 	out.body.ControlProgram = controlProgram

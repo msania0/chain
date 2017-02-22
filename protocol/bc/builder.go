@@ -1,7 +1,7 @@
 package bc
 
 type (
-	// output contains a valueSource that must refer to the mux by its
+	// output contains a ValueSource that must refer to the mux by its
 	// entryID, but the mux may not be complete at the time AddOutput is
 	// called, so we hold outputs in a pending structure until Build is
 	// called
@@ -80,7 +80,7 @@ func (b *Builder) MaxTimeMS() uint64 {
 func (b *Builder) AddIssuance(nonce *EntryRef, value AssetAmount, data Hash) *EntryRef {
 	issRef := &EntryRef{Entry: newIssuance(nonce, value, data)}
 	b.issuances = append(b.issuances, issRef)
-	s := valueSource{
+	s := ValueSource{
 		Ref:   issRef,
 		Value: value,
 	}
@@ -110,7 +110,7 @@ func (b *Builder) AddRetirement(value AssetAmount, data Hash) {
 func (b *Builder) AddSpend(spentOutput *EntryRef, value AssetAmount, data Hash) *EntryRef {
 	spRef := &EntryRef{Entry: NewSpend(spentOutput, data)}
 	b.spends = append(b.spends, spRef)
-	src := valueSource{
+	src := ValueSource{
 		Ref:   spRef,
 		Value: value,
 	}
@@ -127,7 +127,7 @@ func (b *Builder) Build() *Transaction {
 		Issuances: b.issuances,
 	}
 	for _, po := range b.outputs {
-		s := valueSource{
+		s := ValueSource{
 			Ref:      muxRef,
 			Value:    po.value,
 			Position: n,
@@ -139,7 +139,7 @@ func (b *Builder) Build() *Transaction {
 		tx.Outputs = append(tx.Outputs, oRef)
 	}
 	for _, pr := range b.retirements {
-		s := valueSource{
+		s := ValueSource{
 			Ref:      muxRef,
 			Value:    pr.value,
 			Position: n,

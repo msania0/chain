@@ -2,7 +2,7 @@ package bc
 
 type Retirement struct {
 	body struct {
-		Source  valueSource
+		Source  ValueSource
 		Data    Hash
 		ExtHash Hash
 	}
@@ -26,7 +26,7 @@ func (r *Retirement) Data() Hash {
 	return r.body.Data
 }
 
-func newRetirement(source valueSource, data Hash) *Retirement {
+func newRetirement(source ValueSource, data Hash) *Retirement {
 	r := new(Retirement)
 	r.body.Source = source
 	r.body.Data = data

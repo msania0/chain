@@ -1,6 +1,6 @@
 package bc
 
-type valueSource struct {
+type ValueSource struct {
 	Ref      *EntryRef
 	Value    AssetAmount
 	Position uint64 // zero unless Ref is a mux
