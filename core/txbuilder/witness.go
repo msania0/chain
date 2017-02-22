@@ -178,9 +178,9 @@ func buildSigProgram(tpl *Template, inpHash bc.Hash) []byte {
 		minTimeMS: tpl.Transaction.MinTimeMS(),
 		maxTimeMS: tpl.Transaction.MaxTimeMS(),
 	})
-	inp := tpl.Transaction.Inputs[index]
-	if !inp.IsIssuance() {
-		constraints = append(constraints, outputIDConstraint(inp.SpentOutputID()))
+	inp := tpl.Transaction.Inputs[inpHash]
+	if sp, ok := inp.Entry.(*bc.Spend); ok {
+		constraints = append(constraints, outputIDConstraint(sp.SpentOutput.Hash()))
 	}
 
 	// Commitment to the tx-level refdata is conditional on it being

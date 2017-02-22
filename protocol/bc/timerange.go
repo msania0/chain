@@ -21,7 +21,7 @@ func (tr *TimeRange) MaxTimeMS() uint64 {
 	return tr.body.MaxTimeMS
 }
 
-func newTimeRange(minTimeMS, maxTimeMS uint64) *TimeRange {
+func NewTimeRange(minTimeMS, maxTimeMS uint64) *TimeRange {
 	tr := new(TimeRange)
 	tr.body.MinTimeMS = minTimeMS
 	tr.body.MaxTimeMS = maxTimeMS

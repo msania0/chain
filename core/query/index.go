@@ -168,7 +168,7 @@ func (ind *Indexer) insertAnnotatedInputs(ctx context.Context, b *bc.Block, anno
 			inputReferenceDatas = append(inputReferenceDatas, string(*in.ReferenceData))
 			inputLocals = append(inputLocals, bool(in.IsLocal))
 			if in.SpentOutputID != nil {
-				inputSpentOutputIDs = append(inputSpentOutputIDs, in.SpentOutputID.Hash[:])
+				inputSpentOutputIDs = append(inputSpentOutputIDs, in.SpentOutputID[:])
 			} else {
 				inputSpentOutputIDs = append(inputSpentOutputIDs, nil)
 			}

@@ -10,7 +10,6 @@ import (
 
 	"chain/core/query/filter"
 	"chain/errors"
-	"chain/protocol/bc"
 )
 
 var defaultOutputsAfter = OutputsAfter{

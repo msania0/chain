@@ -18,7 +18,7 @@ func (n *Nonce) TimeRange() *EntryRef {
 	return n.body.TimeRange
 }
 
-func newNonce(p Program, tr *EntryRef) *Nonce {
+func NewNonce(p Program, tr *EntryRef) *Nonce {
 	n := new(Nonce)
 	n.body.Program = p
 	n.body.TimeRange = tr

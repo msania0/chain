@@ -4,6 +4,7 @@ import (
 	"context"
 	stdjson "encoding/json"
 
+	"chain/crypto/sha3pool"
 	"chain/encoding/json"
 	"chain/protocol/bc"
 	"chain/protocol/vm"
@@ -44,11 +45,11 @@ func (a *controlReceiverAction) Build(ctx context.Context, b *TemplateBuilder) e
 	}
 
 	b.RestrictMaxTime(a.Receiver.ExpiresAt)
-	var dataRef *bc.EntryRef
+	var refdataHash bc.Hash
 	if len(a.ReferenceData) > 0 {
-		dataRef = &bc.EntryRef{Entry: bc.NewData(bc.HashData(a.ReferenceData))}
+		sha3pool.Sum256(refdataHash[:], a.ReferenceData)
 	}
-	return b.AddOutput(a.AssetAmount, bc.Program{VMVersion: 1, Code: a.Receiver.ControlProgram}, dataRef)
+	return b.AddOutput(a.AssetAmount, bc.Program{VMVersion: 1, Code: a.Receiver.ControlProgram}, refdataHash)
 }
 
 func DecodeControlProgramAction(data []byte) (Action, error) {
@@ -74,11 +75,11 @@ func (a *controlProgramAction) Build(ctx context.Context, b *TemplateBuilder) er
 	if len(missing) > 0 {
 		return MissingFieldsError(missing...)
 	}
-	var dataRef *bc.EntryRef
+	var refdataHash bc.Hash
 	if len(a.ReferenceData) > 0 {
-		dataRef = &bc.EntryRef{Entry: bc.NewData(bc.HashData(a.ReferenceData))}
+		sha3pool.Sum256(refdataHash[:], a.ReferenceData)
 	}
-	return b.AddOutput(a.AssetAmount, bc.Program{VMVersion: 1, Code: a.Program}, dataRef)
+	return b.AddOutput(a.AssetAmount, bc.Program{VMVersion: 1, Code: a.Program}, refdataHash)
 }
 
 func DecodeSetTxRefDataAction(data []byte) (Action, error) {
@@ -120,9 +121,9 @@ func (a *retireAction) Build(ctx context.Context, b *TemplateBuilder) error {
 	if len(missing) > 0 {
 		return MissingFieldsError(missing...)
 	}
-	var dataRef *bc.EntryRef
+	var refdataHash bc.Hash
 	if len(a.ReferenceData) > 0 {
-		dataRef = &bc.EntryRef{Entry: bc.NewData(bc.HashData(a.ReferenceData))}
+		sha3pool.Sum256(refdataHash[:], a.ReferenceData)
 	}
-	return b.AddRetirement(a.AssetAmount, dataRef)
+	return b.AddRetirement(a.AssetAmount, refdataHash)
 }

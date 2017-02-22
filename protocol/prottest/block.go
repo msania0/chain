@@ -53,7 +53,7 @@ func NewChainWithStorage(tb testing.TB, store protocol.Store) *protocol.Chain {
 // MakeBlock always makes a block;
 // if there are no transactions in txs,
 // it makes an empty block.
-func MakeBlock(tb testing.TB, c *protocol.Chain, txs []*bc.Tx) *bc.Block {
+func MakeBlock(tb testing.TB, c *protocol.Chain, txs []*bc.Transaction) *bc.Block {
 	ctx := context.Background()
 	curBlock, err := c.GetBlock(ctx, c.Height())
 	if err != nil {

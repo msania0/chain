@@ -25,7 +25,7 @@ type TemplateBuilder struct {
 	isLocal             bool
 }
 
-func (b *TemplateBuilder) AddSpend(spentOutput *bc.EntryRef, value bc.AssetAmount, data *bc.EntryRef, sigInstruction *SigningInstruction) error {
+func (b *TemplateBuilder) AddSpend(spentOutput *bc.EntryRef, value bc.AssetAmount, data bc.Hash, sigInstruction *SigningInstruction) error {
 	if value.Amount > math.MaxInt64 {
 		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", value.Amount)
 	}
@@ -39,7 +39,7 @@ func (b *TemplateBuilder) AddSpend(spentOutput *bc.EntryRef, value bc.AssetAmoun
 	return nil
 }
 
-func (b *TemplateBuilder) AddIssuance(nonce *bc.EntryRef, value bc.AssetAmount, data *bc.EntryRef, sigInstruction *SigningInstruction) error {
+func (b *TemplateBuilder) AddIssuance(nonce *bc.EntryRef, value bc.AssetAmount, data bc.Hash, sigInstruction *SigningInstruction) error {
 	if value.Amount > math.MaxInt64 {
 		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", value.Amount)
 	}
@@ -48,7 +48,7 @@ func (b *TemplateBuilder) AddIssuance(nonce *bc.EntryRef, value bc.AssetAmount, 
 	return nil
 }
 
-func (b *TemplateBuilder) AddOutput(value bc.AssetAmount, controlProg bc.Program, data *bc.EntryRef) error {
+func (b *TemplateBuilder) AddOutput(value bc.AssetAmount, controlProg bc.Program, data bc.Hash) error {
 	if value.Amount > math.MaxInt64 {
 		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", value.Amount)
 	}
@@ -56,7 +56,7 @@ func (b *TemplateBuilder) AddOutput(value bc.AssetAmount, controlProg bc.Program
 	return nil
 }
 
-func (b *TemplateBuilder) AddRetirement(value bc.AssetAmount, data *bc.EntryRef) error {
+func (b *TemplateBuilder) AddRetirement(value bc.AssetAmount, data bc.Hash) error {
 	if value.Amount > math.MaxInt64 {
 		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", value.Amount)
 	}
