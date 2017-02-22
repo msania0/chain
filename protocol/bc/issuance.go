@@ -4,7 +4,7 @@ type Issuance struct {
 	body struct {
 		Anchor  *EntryRef
 		Value   AssetAmount
-		Data    *EntryRef
+		Data    Hash
 		ExtHash Hash
 	}
 	witness struct {
@@ -35,12 +35,8 @@ func (iss *Issuance) Anchor() *EntryRef {
 	return iss.body.Anchor
 }
 
-func (iss *Issuance) Data() *EntryRef {
+func (iss *Issuance) Data() Hash {
 	return iss.body.Data
-}
-
-func (iss *Issuance) RefDataHash() Hash {
-	return refDataHash(iss.body.Data)
 }
 
 func (iss *Issuance) InitialBlockID() Hash {
@@ -59,7 +55,7 @@ func (iss *Issuance) SetArguments(args [][]byte) {
 	iss.witness.Arguments = args
 }
 
-func newIssuance(anchor *EntryRef, value AssetAmount, data *EntryRef) *Issuance {
+func newIssuance(anchor *EntryRef, value AssetAmount, data Hash) *Issuance {
 	iss := new(Issuance)
 	iss.body.Anchor = anchor
 	iss.body.Value = value

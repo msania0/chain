@@ -4,7 +4,7 @@ type Output struct {
 	body struct {
 		Source         valueSource
 		ControlProgram Program
-		Data           *EntryRef
+		Data           Hash
 		ExtHash        Hash
 	}
 }
@@ -27,15 +27,11 @@ func (o *Output) ControlProgram() Program {
 	return o.body.ControlProgram
 }
 
-func (o *Output) Data() *EntryRef {
+func (o *Output) Data() Hash {
 	return o.body.Data
 }
 
-func (o *Output) RefDataHash() Hash {
-	return refDataHash(o.body.Data)
-}
-
-func newOutput(source valueSource, controlProgram Program, data *EntryRef) *Output {
+func newOutput(source valueSource, controlProgram Program, data Hash) *Output {
 	out := new(Output)
 	out.body.Source = source
 	out.body.ControlProgram = controlProgram

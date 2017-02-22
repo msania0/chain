@@ -4,7 +4,7 @@ type Header struct {
 	body struct {
 		Version              uint64
 		Results              []*EntryRef
-		Data                 *EntryRef
+		Data                 Hash
 		MinTimeMS, MaxTimeMS uint64
 		ExtHash              Hash
 	}
@@ -32,12 +32,8 @@ func (h *Header) Results() []*EntryRef {
 	return h.body.Results
 }
 
-func (h *Header) Data() *EntryRef {
+func (h *Header) Data() Hash {
 	return h.body.Data
-}
-
-func (h *Header) RefDataHash() Hash {
-	return refDataHash(h.body.Data)
 }
 
 func (h *Header) Walk(visitor func(*EntryRef) error) error {
@@ -53,22 +49,14 @@ func (h *Header) Walk(visitor func(*EntryRef) error) error {
 		visited[h] = true
 		return visitor(e)
 	}
-	err := visit(h.body.Data)
-	if err != nil {
-		return err
-	}
 	for _, res := range h.body.Results {
-		err = visit(res)
+		err := visit(res)
 		if err != nil {
 			return err
 		}
 		switch e2 := res.Entry.(type) {
 		case *Issuance:
 			err = visit(e2.body.Anchor)
-			if err != nil {
-				return err
-			}
-			err = visit(e2.body.Data)
 			if err != nil {
 				return err
 			}
@@ -97,25 +85,13 @@ func (h *Header) Walk(visitor func(*EntryRef) error) error {
 			if err != nil {
 				return err
 			}
-			err = visit(e2.body.Data)
-			if err != nil {
-				return err
-			}
 		case *Retirement:
 			err = visit(e2.body.Source.Ref)
 			if err != nil {
 				return err
 			}
-			err = visit(e2.body.Data)
-			if err != nil {
-				return err
-			}
 		case *Spend:
 			err = visit(e2.body.SpentOutput)
-			if err != nil {
-				return err
-			}
-			err = visit(e2.body.Data)
 			if err != nil {
 				return err
 			}
@@ -143,7 +119,7 @@ func (h *Header) Inputs() (spends, issuances []*EntryRef) {
 	return
 }
 
-func newHeader(version uint64, results []*EntryRef, data *EntryRef, minTimeMS, maxTimeMS uint64) *Header {
+func newHeader(version uint64, results []*EntryRef, data Hash, minTimeMS, maxTimeMS uint64) *Header {
 	h := new(Header)
 	h.body.Version = version
 	h.body.Results = results

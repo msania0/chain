@@ -304,10 +304,7 @@ func ApplyTx(snapshot *state.Snapshot, tx *bc.Transaction) error {
 	for _, spRef := range tx.Spends {
 		sp := spRef.Entry.(*bc.Spend)
 		spentOutputID := sp.SpentOutput().Hash()
-		err := snapshot.Tree.Delete(spentOutputID.Bytes())
-		if err != nil {
-			return err
-		}
+		snapshot.Tree.Delete(spentOutputID.Bytes())
 	}
 
 	for _, outRef := range tx.Outputs {

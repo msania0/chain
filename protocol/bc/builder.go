@@ -8,12 +8,12 @@ type (
 	pendingOutput struct {
 		value       AssetAmount
 		controlProg Program
-		data        *EntryRef
+		data        Hash
 	}
 
 	pendingRetirement struct {
 		value AssetAmount
-		data  *EntryRef
+		data  Hash
 	}
 
 	Builder struct {
@@ -27,7 +27,7 @@ type (
 
 func NewBuilder(version, minTimeMS, maxTimeMS uint64, base *Transaction) *Builder {
 	result := &Builder{
-		h: newHeader(version, nil, nil, minTimeMS, maxTimeMS),
+		h: newHeader(version, nil, Hash{}, minTimeMS, maxTimeMS),
 		m: newMux(nil),
 	}
 	if base != nil {
@@ -69,7 +69,7 @@ func (b *Builder) MaxTimeMS() uint64 {
 	return b.h.MaxTimeMS()
 }
 
-func (b *Builder) AddIssuance(nonce *EntryRef, value AssetAmount, data *EntryRef) *EntryRef {
+func (b *Builder) AddIssuance(nonce *EntryRef, value AssetAmount, data Hash) *EntryRef {
 	issRef := &EntryRef{Entry: newIssuance(nonce, value, data)}
 	b.issuances = append(b.issuances, issRef)
 	s := valueSource{
@@ -82,7 +82,7 @@ func (b *Builder) AddIssuance(nonce *EntryRef, value AssetAmount, data *EntryRef
 
 // AddOutput does not return an entry, unlike other Add
 // functions, since output objects aren't created until Build
-func (b *Builder) AddOutput(value AssetAmount, controlProg Program, data *EntryRef) {
+func (b *Builder) AddOutput(value AssetAmount, controlProg Program, data Hash) {
 	b.outputs = append(b.outputs, &pendingOutput{
 		value:       value,
 		controlProg: controlProg,
@@ -92,14 +92,14 @@ func (b *Builder) AddOutput(value AssetAmount, controlProg Program, data *EntryR
 
 // AddRetirement does not return an entry, unlike most other Add
 // functions, since retirement objects aren't created until Build
-func (b *Builder) AddRetirement(value AssetAmount, data *EntryRef) {
+func (b *Builder) AddRetirement(value AssetAmount, data Hash) {
 	b.retirements = append(b.retirements, &pendingRetirement{
 		value: value,
 		data:  data,
 	})
 }
 
-func (b *Builder) AddSpend(spentOutput *EntryRef, value AssetAmount, data *EntryRef) *EntryRef {
+func (b *Builder) AddSpend(spentOutput *EntryRef, value AssetAmount, data Hash) *EntryRef {
 	spRef := &EntryRef{Entry: newSpend(spentOutput, data)}
 	b.spends = append(b.spends, spRef)
 	src := valueSource{

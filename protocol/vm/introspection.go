@@ -79,7 +79,7 @@ func opCheckOutput(vm *virtualMachine) error {
 		return vm.pushBool(false, true)
 	}
 	if len(refdatahash) > 0 {
-		oRefDataHash := o.RefDataHash()
+		oRefDataHash := o.Data()
 		if !bytes.Equal(oRefDataHash[:], refdatahash) {
 			return vm.pushBool(false, true)
 		}
@@ -213,9 +213,9 @@ func opRefDataHash(vm *virtualMachine) error {
 
 	switch e := vm.input.Entry.(type) {
 	case *bc.Spend:
-		h = e.RefDataHash()
+		h = e.Data()
 	case *bc.Issuance:
-		h = e.RefDataHash()
+		h = e.Data()
 	default:
 		// xxx error
 	}
@@ -233,7 +233,7 @@ func opTxRefDataHash(vm *virtualMachine) error {
 		return err
 	}
 
-	h := vm.tx.RefDataHash()
+	h := vm.tx.Data()
 	return vm.push(h[:], true)
 }
 

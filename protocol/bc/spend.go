@@ -3,7 +3,7 @@ package bc
 type Spend struct {
 	body struct {
 		SpentOutput *EntryRef
-		Data        *EntryRef
+		Data        Hash
 		ExtHash     Hash
 	}
 	witness struct {
@@ -23,12 +23,8 @@ func (s *Spend) SpentOutput() *EntryRef {
 	return s.body.SpentOutput
 }
 
-func (s *Spend) Data() *EntryRef {
+func (s *Spend) Data() Hash {
 	return s.body.Data
-}
-
-func (s *Spend) RefDataHash() Hash {
-	return refDataHash(s.body.Data)
 }
 
 func (s *Spend) Arguments() [][]byte {
@@ -39,7 +35,7 @@ func (s *Spend) SetArguments(args [][]byte) {
 	s.witness.Arguments = args
 }
 
-func newSpend(spentOutput, data *EntryRef) *Spend {
+func newSpend(spentOutput *EntryRef, data Hash) *Spend {
 	s := new(Spend)
 	s.body.SpentOutput = spentOutput
 	s.body.Data = data

@@ -57,7 +57,7 @@ func (tx *Transaction) Version() uint64 {
 	return tx.Header.Entry.(*Header).Version()
 }
 
-func (tx *Transaction) Data() *EntryRef {
+func (tx *Transaction) Data() Hash {
 	return tx.Header.Entry.(*Header).Data()
 }
 
@@ -67,10 +67,6 @@ func (tx *Transaction) MinTimeMS() uint64 {
 
 func (tx *Transaction) MaxTimeMS() uint64 {
 	return tx.Header.Entry.(*Header).MaxTimeMS()
-}
-
-func (tx *Transaction) RefDataHash() Hash {
-	return tx.Header.Entry.(*Header).RefDataHash()
 }
 
 // writeTx writes the Header to w, followed by a varint31 count of
