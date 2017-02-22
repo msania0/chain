@@ -15,6 +15,11 @@ type Template struct {
 	Transaction         *bc.Transaction                 `json:"raw_transaction"` // xxx must json-encode to the transitive collection of entries
 	SigningInstructions map[bc.Hash]*SigningInstruction `json:"signing_instructions"`
 
+	// RefData maps hashes to the bare reference data that produced
+	// them. xxx do something with this! (e.g., stick it in the db on
+	// finalize)
+	RefData map[bc.Hash][]byte
+
 	// Local indicates that all inputs to the transaction are signed
 	// exclusively by keys managed by this Core. Whenever accepting
 	// a template from an external Core, `Local` should be set to

@@ -134,9 +134,11 @@ func buildAnnotatedTransaction(orig *bc.Transaction, b *bc.Block, indexInBlock u
 		Inputs:        make([]*AnnotatedInput, 0, len(orig.Spends)+len(orig.Issuances)),
 		Outputs:       make([]*AnnotatedOutput, 0, len(orig.Outputs)+len(orig.Retirements)),
 	}
-	if len(orig.ReferenceData) > 0 {
-		referenceData := json.RawMessage(orig.ReferenceData)
-		tx.ReferenceData = &referenceData
+	if (orig.Data() != bc.Hash{}) {
+		referenceData := lookupRefData(orig.Data())
+		if len(referenceData) > 0 {
+			tx.ReferenceData = &referenceData
+		}
 	}
 
 	for _, in := range orig.Spends {
@@ -176,7 +178,12 @@ func buildAnnotatedSpend(orig *bc.EntryRef) *AnnotatedInput {
 		SpentOutputID:   &prevoutID,
 	}
 
-	// xxx how to populate in.ReferenceData? the blockchain no longer stores bare refdata, only its hash
+	if (sp.Data() != bc.Hash{}) {
+		referenceData := lookupRefData(sp.Data())
+		if len(referenceData) > 0 {
+			in.ReferenceData = &referenceData
+		}
+	}
 
 	return in
 }
@@ -193,14 +200,18 @@ func buildAnnotatedIssuance(orig *bc.EntryRef) *AnnotatedInput {
 		IssuanceProgram: iss.IssuanceProgram().Code, // xxx should annotated input preserve the vmversion field?
 	}
 
-	// xxx how to populate in.ReferenceData? the blockchain no longer stores bare refdata, only its hash
+	if (iss.Data() != bc.Hash{}) {
+		referenceData := lookupRefData(iss.Data())
+		if len(referenceData) > 0 {
+			in.ReferenceData = &referenceData
+		}
+	}
 
 	return in
 }
 
 func buildAnnotatedOutput(out *bc.Output, outputID bc.Hash, pos uint32) *AnnotatedOutput {
-	// xxx how to populate ReferenceData? the blockchain no longer stores bare refdata, only its hash
-	return &AnnotatedOutput{
+	in := &AnnotatedOutput{
 		Type:            "control",
 		OutputID:        outputID,
 		Position:        pos,
@@ -211,11 +222,19 @@ func buildAnnotatedOutput(out *bc.Output, outputID bc.Hash, pos uint32) *Annotat
 		ControlProgram:  out.ControlProgram().Code, // xxx should annotated output preserve the vmversion field?
 		ReferenceData:   &emptyJSONObject,
 	}
+
+	if (out.Data() != bc.Hash{}) {
+		referenceData := lookupRefData(out.Data())
+		if len(referenceData) > 0 {
+			in.ReferenceData = &referenceData
+		}
+	}
+
+	return in
 }
 
 func buildAnnotatedRetirement(ret *bc.Retirement, outputID bc.Hash, pos uint32) *AnnotatedOutput {
-	// xxx how to populate ReferenceData? the blockchain no longer stores bare refdata, only its hash
-	return &AnnotatedOutput{
+	in := &AnnotatedOutput{
 		Type:            "retire",
 		OutputID:        outputID,
 		Position:        pos,
@@ -226,6 +245,15 @@ func buildAnnotatedRetirement(ret *bc.Retirement, outputID bc.Hash, pos uint32) 
 		ControlProgram:  []byte{byte(vm.OP_FALSE)}, // xxx should annotated output preserve the vmversion field?
 		ReferenceData:   &emptyJSONObject,
 	}
+
+	if (ret.Data() != bc.Hash{}) {
+		referenceData := lookupRefData(ret.Data())
+		if len(referenceData) > 0 {
+			in.ReferenceData = &referenceData
+		}
+	}
+
+	return in
 }
 
 // localAnnotator depends on the asset and account annotators and
@@ -247,4 +275,9 @@ func localAnnotator(ctx context.Context, txs []*AnnotatedTx) {
 			}
 		}
 	}
+}
+
+func lookupRefData(hash bc.Hash) json.RawMessage {
+	// xxx
+	return nil
 }

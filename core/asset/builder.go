@@ -8,10 +8,13 @@ import (
 
 	"chain/core/signers"
 	"chain/core/txbuilder"
+	"chain/crypto/sha3pool"
 	"chain/database/pg"
 	chainjson "chain/encoding/json"
 	"chain/errors"
 	"chain/protocol/bc"
+	"chain/protocol/vm"
+	"chain/protocol/vmutil"
 )
 
 func (reg *Registry) NewIssueAction(assetAmount bc.AssetAmount, referenceData chainjson.Map) txbuilder.Action {
@@ -52,16 +55,26 @@ func (a *issueAction) Build(ctx context.Context, builder *txbuilder.TemplateBuil
 	if err != nil {
 		return err
 	}
+	progBuilder := vmutil.NewBuilder()
+	progBuilder.AddData(nonce[:]).AddOp(vm.OP_TRUE)
 
-	assetdef := asset.RawDefinition()
+	now := time.Now()
+	builder.RestrictMinTime(time.Now())
 
-	txin := bc.NewIssuanceInput(nonce[:], a.Amount, a.ReferenceData, asset.InitialBlockHash, asset.IssuanceProgram, nil, assetdef)
+	maxTimeMS := bc.Millis(now.Add(time.Minute)) // xxx placeholder
+	trRef := &bc.EntryRef{Entry: bc.NewTimeRange(bc.Millis(now), maxTimeMS)}
+	nonceRef := &bc.EntryRef{Entry: bc.NewNonce(bc.Program{VMVersion: 1, Code: progBuilder.Program}, trRef)}
 
 	tplIn := &txbuilder.SigningInstruction{AssetAmount: a.AssetAmount}
 	path := signers.Path(asset.Signer, signers.AssetKeySpace)
 	keyIDs := txbuilder.KeyIDs(asset.Signer.XPubs, path)
 	tplIn.AddWitnessKeys(keyIDs, asset.Signer.Quorum)
 
-	builder.RestrictMinTime(time.Now())
-	return builder.AddInput(txin, tplIn)
+	var refdataHash bc.Hash
+	if len(a.ReferenceData) > 0 {
+		sha3pool.Sum256(refdataHash[:], a.ReferenceData)
+		// xxx register data/hash mapping with builder
+	}
+
+	return builder.AddIssuance(nonceRef, a.AssetAmount, refdataHash, tplIn)
 }

@@ -2,12 +2,10 @@ package account
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 
 	"chain/core/signers"
 	"chain/core/txbuilder"
-	"chain/database/pg"
 	chainjson "chain/encoding/json"
 	"chain/errors"
 	"chain/log"

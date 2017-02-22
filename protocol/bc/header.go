@@ -64,10 +64,6 @@ func (h *Header) Walk(visitor func(*EntryRef) error) error {
 			if err != nil {
 				return err
 			}
-			err = visit(e2.witness.AssetDefinition)
-			if err != nil {
-				return err
-			}
 		case *mux:
 			for _, vs := range e2.body.Sources {
 				err = visit(vs.Ref)

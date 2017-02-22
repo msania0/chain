@@ -31,7 +31,7 @@ func (o *Output) Data() Hash {
 	return o.body.Data
 }
 
-func newOutput(source valueSource, controlProgram Program, data Hash) *Output {
+func NewOutput(source valueSource, controlProgram Program, data Hash) *Output {
 	out := new(Output)
 	out.body.Source = source
 	out.body.ControlProgram = controlProgram

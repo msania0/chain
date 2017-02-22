@@ -35,7 +35,7 @@ func (s *Spend) SetArguments(args [][]byte) {
 	s.witness.Arguments = args
 }
 
-func newSpend(spentOutput *EntryRef, data Hash) *Spend {
+func NewSpend(spentOutput *EntryRef, data Hash) *Spend {
 	s := new(Spend)
 	s.body.SpentOutput = spentOutput
 	s.body.Data = data

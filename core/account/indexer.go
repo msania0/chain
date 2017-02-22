@@ -120,7 +120,7 @@ func (m *Manager) indexAccountUTXOs(ctx context.Context, b *bc.Block) error {
 					AssetID: res.AssetID(),
 					Amount:  res.Amount(),
 				}
-				raw.controlProgram = out.ControlProgram().Code // xxx preserve vmversion?
+				raw.controlProgram = res.ControlProgram().Code // xxx preserve vmversion?
 			case *bc.Retirement:
 				// xxx should this loop include or exclude retirements?
 			}
@@ -147,14 +147,13 @@ func (m *Manager) indexAccountUTXOs(ctx context.Context, b *bc.Block) error {
 	return errors.Wrap(err, "deleting spent account utxos")
 }
 
-func prevoutDBKeys(txs ...*bc.Tx) (outputIDs pq.ByteaArray) {
+func prevoutDBKeys(txs ...*bc.Transaction) (outputIDs pq.ByteaArray) {
 	for _, tx := range txs {
-		for _, in := range tx.Inputs {
-			if in.IsIssuance() {
-				continue
-			}
-			o := in.SpentOutputID()
-			outputIDs = append(outputIDs, o.Bytes())
+		for _, spRef := range tx.Spends {
+			sp := spRef.Entry.(*bc.Spend)
+			spentRef := sp.SpentOutput()
+			spentID := spentRef.Hash()
+			outputIDs = append(outputIDs, spentID[:])
 		}
 	}
 	return
@@ -166,7 +165,7 @@ func prevoutDBKeys(txs ...*bc.Tx) (outputIDs pq.ByteaArray) {
 func (m *Manager) loadAccountInfo(ctx context.Context, outs []*rawOutput) ([]*accountOutput, error) {
 	outsByScript := make(map[string][]*rawOutput, len(outs))
 	for _, out := range outs {
-		scriptStr := string(out.ControlProgram)
+		scriptStr := string(out.controlProgram)
 		outsByScript[scriptStr] = append(outsByScript[scriptStr], out)
 	}
 
@@ -214,12 +213,12 @@ func (m *Manager) upsertConfirmedAccountOutputs(ctx context.Context, outs []*acc
 	)
 	for _, out := range outs {
 		txHash = append(txHash, out.txHash[:])
-		outputID = append(outputID, out.OutputID.Bytes())
+		outputID = append(outputID, out.outputID[:])
 		assetID = append(assetID, out.AssetID[:])
 		amount = append(amount, int64(out.Amount))
 		accountID = append(accountID, out.AccountID)
 		cpIndex = append(cpIndex, int64(out.keyIndex))
-		program = append(program, out.ControlProgram)
+		program = append(program, out.controlProgram)
 	}
 
 	const q = `

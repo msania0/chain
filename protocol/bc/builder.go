@@ -53,6 +53,14 @@ func NewBuilder(version, minTimeMS, maxTimeMS uint64, base *Transaction) *Builde
 	return result
 }
 
+func (b *Builder) Data() Hash {
+	return b.h.Data()
+}
+
+func (b *Builder) SetData(h Hash) {
+	b.h.body.Data = h
+}
+
 func (b *Builder) RestrictMinTimeMS(minTimeMS uint64) {
 	if minTimeMS > b.h.MinTimeMS() {
 		b.h.body.MinTimeMS = minTimeMS
@@ -100,7 +108,7 @@ func (b *Builder) AddRetirement(value AssetAmount, data Hash) {
 }
 
 func (b *Builder) AddSpend(spentOutput *EntryRef, value AssetAmount, data Hash) *EntryRef {
-	spRef := &EntryRef{Entry: newSpend(spentOutput, data)}
+	spRef := &EntryRef{Entry: NewSpend(spentOutput, data)}
 	b.spends = append(b.spends, spRef)
 	src := valueSource{
 		Ref:   spRef,
@@ -125,7 +133,7 @@ func (b *Builder) Build() *Transaction {
 			Position: n,
 		}
 		n++
-		o := newOutput(s, po.controlProg, po.data)
+		o := NewOutput(s, po.controlProg, po.data)
 		oRef := &EntryRef{Entry: o}
 		b.h.body.Results = append(b.h.body.Results, oRef)
 		tx.Outputs = append(tx.Outputs, oRef)

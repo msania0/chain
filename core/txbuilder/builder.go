@@ -1,10 +1,10 @@
 package txbuilder
 
 import (
-	"bytes"
 	"math"
 	"time"
 
+	"chain/crypto/sha3pool"
 	"chain/errors"
 	"chain/protocol/bc"
 )
@@ -13,6 +13,7 @@ func NewBuilder(maxTime time.Time, tx *bc.Transaction) *TemplateBuilder {
 	return &TemplateBuilder{
 		bcBuilder:           bc.NewBuilder(1, 0, bc.Millis(maxTime), tx), // xxx should the 0 be bc.Millis(time.Now())?
 		signingInstructions: make(map[bc.Hash]*SigningInstruction),
+		refData:             make(map[bc.Hash][]byte),
 		isLocal:             tx == nil,
 	}
 }
@@ -20,6 +21,7 @@ func NewBuilder(maxTime time.Time, tx *bc.Transaction) *TemplateBuilder {
 type TemplateBuilder struct {
 	bcBuilder           *bc.Builder
 	signingInstructions map[bc.Hash]*SigningInstruction
+	refData             map[bc.Hash][]byte
 	rollbacks           []func()
 	callbacks           []func() error
 	isLocal             bool
@@ -94,14 +96,16 @@ func (b *TemplateBuilder) OnBuild(buildFn func() error) {
 }
 
 func (b *TemplateBuilder) setReferenceData(data []byte) error {
-	// if b.base != nil && len(b.base.ReferenceData) != 0 && !bytes.Equal(b.base.ReferenceData, data) {
-	// 	return errors.Wrap(ErrBadRefData)
-	// }
-	// xxx update the following
-	if len(b.referenceData) != 0 && !bytes.Equal(b.referenceData, data) {
+	var dhash bc.Hash
+	sha3pool.Sum256(dhash[:], data)
+
+	bhash := b.bcBuilder.Data()
+	if (bhash != bc.Hash{}) && bhash != dhash {
+		// Trying to set the refdata after it has already been set
 		return errors.Wrap(ErrBadRefData)
 	}
-	b.referenceData = data
+	b.bcBuilder.SetData(dhash)
+	b.refData[dhash] = data
 	return nil
 }
 
@@ -131,6 +135,7 @@ func (b *TemplateBuilder) Build() (*Template, *bc.Transaction, error) {
 	tpl := &Template{
 		Transaction:         tx,
 		SigningInstructions: b.signingInstructions,
+		RefData:             b.refData,
 		Local:               b.isLocal,
 	}
 

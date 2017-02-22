@@ -49,16 +49,16 @@ func (tx *Transaction) SigHash(inpHash Hash) (hash Hash) {
 	return hash
 }
 
+func (tx *Transaction) Data() Hash {
+	return tx.Header.Entry.(*Header).Data()
+}
+
 func (tx *Transaction) Results() []*EntryRef {
 	return tx.Header.Entry.(*Header).Results()
 }
 
 func (tx *Transaction) Version() uint64 {
 	return tx.Header.Entry.(*Header).Version()
-}
-
-func (tx *Transaction) Data() Hash {
-	return tx.Header.Entry.(*Header).Data()
 }
 
 func (tx *Transaction) MinTimeMS() uint64 {

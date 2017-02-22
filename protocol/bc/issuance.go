@@ -8,12 +8,12 @@ type Issuance struct {
 		ExtHash Hash
 	}
 	witness struct {
-		Destination     valueDestination
-		InitialBlockID  Hash
-		AssetDefinition *EntryRef // data entry
-		IssuanceProgram Program
-		Arguments       [][]byte
-		ExtHash         Hash
+		Destination         valueDestination
+		InitialBlockID      Hash
+		AssetDefinitionHash Hash
+		IssuanceProgram     Program
+		Arguments           [][]byte
+		ExtHash             Hash
 	}
 }
 
@@ -41,6 +41,10 @@ func (iss *Issuance) Data() Hash {
 
 func (iss *Issuance) InitialBlockID() Hash {
 	return iss.witness.InitialBlockID
+}
+
+func (iss *Issuance) AssetDefinitionHash() Hash {
+	return iss.witness.AssetDefinitionHash
 }
 
 func (iss *Issuance) IssuanceProgram() Program {
