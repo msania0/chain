@@ -78,12 +78,28 @@ func KeyIDs(xpubs []chainkd.XPub, path [][]byte) []KeyID {
 }
 
 func Sign(ctx context.Context, tpl *Template, xpubs []chainkd.XPub, signFn SignFunc) error {
-	for hash, sigInst := range tpl.SigningInstructions {
-		for j, c := range sigInst.WitnessComponents {
-			err := c.Sign(ctx, tpl, hash, xpubs, signFn)
-			if err != nil {
-				return errors.WithDetailf(err, "adding signature(s) to witness component %d of input %x", j, hash[:])
+	signComponents := func(inpRef *bc.EntryRef) error {
+		hash := inpRef.Hash()
+		if sigInst, ok := tpl.SigningInstructions[hash]; ok {
+			for j, c := range sigInst.WitnessComponents {
+				err := c.Sign(ctx, tpl, inpRef, xpubs, signFn)
+				if err != nil {
+					return errors.WithDetailf(err, "adding signature(s) to witness component %d of input %x", j, hash[:])
+				}
 			}
+		}
+		return nil
+	}
+	for _, issRef := range tpl.Transaction.Issuances {
+		err := signComponents(issRef)
+		if err != nil {
+			return err
+		}
+	}
+	for _, spRef := range tpl.Transaction.Spends {
+		err := signComponents(spRef)
+		if err != nil {
+			return err
 		}
 	}
 	return materializeWitnesses(tpl)

@@ -88,7 +88,8 @@ func NewIssuanceTx(tb testing.TB, c *protocol.Chain) *bc.Transaction {
 	witness = append(witness, vm.Int64Bytes(0)) // 0 args to the sigprog
 	witness = append(witness, signature)
 	witness = append(witness, sigprog)
-	tx.Inputs[0].SetArguments(witness)
+	iss := issRef.Entry.(*bc.Issuance)
+	iss.SetArguments(witness)
 
 	return tx
 }

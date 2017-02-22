@@ -25,7 +25,7 @@ type SignFunc func(context.Context, chainkd.XPub, [][]byte, [32]byte) ([]byte, e
 type WitnessComponent interface {
 	// Sign is called to add signatures. Actual signing is delegated to
 	// a callback function.
-	Sign(context.Context, *Template, bc.Hash, []chainkd.XPub, SignFunc) error
+	Sign(context.Context, *Template, *bc.EntryRef, []chainkd.XPub, SignFunc) error
 
 	// Materialize is called to turn the component into a vector of
 	// arguments for the input witness.
@@ -114,13 +114,13 @@ var ErrEmptyProgram = errors.New("empty signature program")
 //  - the mintime and maxtime of the transaction (if non-zero)
 //  - the outputID and (if non-empty) reference data of the current input
 //  - the assetID, amount, control program, and (if non-empty) reference data of each output.
-func (sw *SignatureWitness) Sign(ctx context.Context, tpl *Template, inpHash bc.Hash, xpubs []chainkd.XPub, signFn SignFunc) error {
+func (sw *SignatureWitness) Sign(ctx context.Context, tpl *Template, inpRef *bc.EntryRef, xpubs []chainkd.XPub, signFn SignFunc) error {
 	// Compute the predicate to sign. This is either a
 	// txsighash program if tpl.AllowAdditional is false (i.e., the tx is complete
 	// and no further changes are allowed) or a program enforcing
 	// constraints derived from the existing outputs and current input.
 	if len(sw.Program) == 0 {
-		sw.Program = buildSigProgram(tpl, inpHash)
+		sw.Program = buildSigProgram(tpl, inpRef)
 		if len(sw.Program) == 0 {
 			return ErrEmptyProgram
 		}
@@ -165,9 +165,9 @@ func contains(list []chainkd.XPub, key chainkd.XPub) bool {
 	return false
 }
 
-func buildSigProgram(tpl *Template, inpHash bc.Hash) []byte {
+func buildSigProgram(tpl *Template, inpRef *bc.EntryRef) []byte {
 	if !tpl.AllowAdditional {
-		h := tpl.Hash(inpHash)
+		h := tpl.Hash(inpRef.Hash())
 		builder := vmutil.NewBuilder()
 		builder.AddData(h[:])
 		builder.AddOp(vm.OP_TXSIGHASH).AddOp(vm.OP_EQUAL)
@@ -178,34 +178,48 @@ func buildSigProgram(tpl *Template, inpHash bc.Hash) []byte {
 		minTimeMS: tpl.Transaction.MinTimeMS(),
 		maxTimeMS: tpl.Transaction.MaxTimeMS(),
 	})
-	inp := tpl.Transaction.Inputs[inpHash]
-	if sp, ok := inp.Entry.(*bc.Spend); ok {
-		constraints = append(constraints, outputIDConstraint(sp.SpentOutput.Hash()))
+	if sp, ok := inpRef.Entry.(*bc.Spend); ok {
+		constraints = append(constraints, outputIDConstraint(sp.SpentOutput().Hash()))
 	}
 
-	// Commitment to the tx-level refdata is conditional on it being
-	// non-empty. Commitment to the input-level refdata is
-	// unconditional. Rationale: no one should be able to change "my"
-	// reference data; anyone should be able to set tx refdata but, once
-	// set, it should be immutable.
-	if len(tpl.Transaction.ReferenceData) > 0 {
-		constraints = append(constraints, refdataConstraint{tpl.Transaction.ReferenceData, true})
+	// Commitment to refdata is conditional on it being non-zero.
+	data := tpl.Transaction.Data()
+	if (data != bc.Hash{}) {
+		constraints = append(constraints, refdataConstraint{data[:], true})
 	}
-	constraints = append(constraints, refdataConstraint{inp.ReferenceData, false})
+	switch inp := inpRef.Entry.(type) {
+	case *bc.Issuance:
+		data = inp.Data()
+	case *bc.Spend:
+		data = inp.Data()
+	default:
+		data = bc.Hash{}
+	}
+	if (data != bc.Hash{}) {
+		constraints = append(constraints, refdataConstraint{data[:], false})
+	}
 
-	for i, out := range tpl.Transaction.Outputs {
+	for _, outRef := range tpl.Transaction.Outputs {
+		out := outRef.Entry.(*bc.Output)
 		c := &payConstraint{
-			Index:       i,
-			AssetAmount: out.AssetAmount,
-			Program:     out.ControlProgram,
-		}
-		if len(out.ReferenceData) > 0 {
-			var h [32]byte
-			sha3pool.Sum256(h[:], out.ReferenceData)
-			c.RefDataHash = (*bc.Hash)(&h)
+			Hash:        outRef.Hash(),
+			AssetAmount: bc.AssetAmount{AssetID: out.AssetID(), Amount: out.Amount()},
+			Program:     out.ControlProgram().Code, // xxx preserve vmversion?
+			Data:        out.Data(),
 		}
 		constraints = append(constraints, c)
 	}
+	for _, retRef := range tpl.Transaction.Retirements {
+		ret := retRef.Entry.(*bc.Retirement)
+		c := &payConstraint{
+			Hash:        retRef.Hash(),
+			AssetAmount: bc.AssetAmount{AssetID: ret.AssetID(), Amount: ret.Amount()},
+			// xxx what value for payConstraint.Program?
+			Data: ret.Data(),
+		}
+		constraints = append(constraints, c)
+	}
+
 	var program []byte
 	for i, c := range constraints {
 		program = append(program, c.code()...)
