@@ -28,7 +28,7 @@ type (
 func NewBuilder(version, minTimeMS, maxTimeMS uint64, base *Transaction) *Builder {
 	result := &Builder{
 		h: newHeader(version, nil, Hash{}, minTimeMS, maxTimeMS),
-		m: newMux(nil),
+		m: newMux(nil, Program{VMVersion: 1, Code: []byte{0x51}}), // 0x51 == OP_TRUE (without the circular dependency)
 	}
 	if base != nil {
 		for _, issRef := range base.Issuances {

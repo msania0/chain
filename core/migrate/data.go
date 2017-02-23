@@ -40,4 +40,10 @@ var migrations = []migration{
 		ALTER TABLE account_utxos ADD CONSTRAINT account_utxos_pkey PRIMARY KEY (output_id);
 		ALTER TABLE account_utxos DROP index;
 	`},
+	{Name: "2017-02-22.0.core.drop-account_utxo-index.sql", SQL: `
+		ALTER TABLE account_utxos DROP tx_hash;
+		ALTER TABLE account_utxos ADD source_ref BYTEA NOT NULL;
+		ALTER TABLE account_utxos ADD source_pos BIGINT NOT NULL;
+		ALTER TABLE account_utxos ADD refdata BYTEA;
+	`},
 }

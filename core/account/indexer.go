@@ -203,33 +203,37 @@ func (m *Manager) loadAccountInfo(ctx context.Context, outs []*rawOutput) ([]*ac
 // block confirmation data will in the row will be updated.
 func (m *Manager) upsertConfirmedAccountOutputs(ctx context.Context, outs []*accountOutput, block *bc.Block) error {
 	var (
-		txHash    pq.ByteaArray
 		outputID  pq.ByteaArray
 		assetID   pq.ByteaArray
 		amount    pq.Int64Array
 		accountID pq.StringArray
 		cpIndex   pq.Int64Array
 		program   pq.ByteaArray
+		sourceRef pq.ByteaArray
+		sourcePos pq.Int64Array
+		refdata   pq.ByteaArray
 	)
 	for _, out := range outs {
-		txHash = append(txHash, out.txHash[:])
 		outputID = append(outputID, out.outputID[:])
 		assetID = append(assetID, out.AssetID[:])
 		amount = append(amount, int64(out.Amount))
 		accountID = append(accountID, out.AccountID)
 		cpIndex = append(cpIndex, int64(out.keyIndex))
 		program = append(program, out.controlProgram)
+		sourceRef = append(sourceRef, out.sourceRef[:])
+		sourcePos = append(sourcePos, out.sourcePos)
+		refdata = append(refdata, out.refdata)
 	}
 
 	const q = `
-		INSERT INTO account_utxos (tx_hash, output_id, asset_id, amount, account_id, control_program_index,
-			control_program, confirmed_in)
-		SELECT unnest($1::bytea[]), unnest($2::bytea[]), unnest($3::bytea[]), unnest($4::bigint[]),
-			   unnest($5::text[]), unnest($6::bigint[]), unnest($7::bytea[]), $8
+		INSERT INTO account_utxos (output_id, asset_id, amount, account_id, control_program_index,
+			control_program, confirmed_in, source_ref, source_pos, refdata)
+		SELECT unnest($1::bytea[]), unnest($2::bytea[]), unnest($3::bigint[]),
+			  unnest($4::text[]), unnest($5::bigint[]), unnest($6::bytea[]), $7,
+				unnest($8::bytea[]), unnest($9::bigint[]), unnest($10::bytea[])
 		ON CONFLICT (output_id) DO NOTHING
 	`
 	_, err := m.db.Exec(ctx, q,
-		txHash,
 		outputID,
 		assetID,
 		amount,
@@ -237,6 +241,9 @@ func (m *Manager) upsertConfirmedAccountOutputs(ctx context.Context, outs []*acc
 		cpIndex,
 		program,
 		block.Height,
+		sourceRef,
+		sourcePos,
+		refdata,
 	)
 	return errors.Wrap(err)
 }
